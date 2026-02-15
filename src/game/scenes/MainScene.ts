@@ -54,7 +54,6 @@ type LevelTemplate = {
 export default class MainScene extends Phaser.Scene {
   private playerCount: 1 | 2 = 1
   private players: PlayerInfo[] = []
-  private ground?: Phaser.GameObjects.Rectangle
   private platforms: Phaser.GameObjects.Rectangle[] = []
   private cupcakeGroup?: Phaser.Physics.Arcade.Group
   private pickupGroup?: Phaser.Physics.Arcade.Group
@@ -130,7 +129,6 @@ export default class MainScene extends Phaser.Scene {
       })
       player.score = 0
       const textX = index === 0 ? 24 : width - 24
-      const textAlign = index === 0 ? 'left' : 'right'
       player.scoreText = this.add.text(textX, 16, '0', {
         fontFamily: '"Fredoka", sans-serif',
         fontSize: '22px',
@@ -147,7 +145,7 @@ export default class MainScene extends Phaser.Scene {
       const colliderObject = player.bodySprite ?? player.sprite
       if (this.pickupGroup) {
         this.physics.add.overlap(colliderObject, this.pickupGroup, (_playerObj, pickupObj) => {
-          this.collectPickup(player, pickupObj as Phaser.GameObjects.GameObject)
+          this.collectPickup(player, pickupObj as Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle)
         })
       }
     })
@@ -182,7 +180,10 @@ export default class MainScene extends Phaser.Scene {
       : [Phaser.Math.Between(0, 1) === 0 ? leftSpawn : rightSpawn]
 
     this.players.forEach((player, index) => {
-      const spawn = spawnPoints[Math.min(index, spawnPoints.length - 1)]
+      const spawn = spawnPoints[Math.min(index, spawnPoints.length - 1)] ?? spawnPoints[0]
+      if (!spawn) {
+        return
+      }
       player.isEating = false
       this.clearPowerUp(player)
       player.body.setVelocity(0, 0)
@@ -333,7 +334,7 @@ export default class MainScene extends Phaser.Scene {
     const halfWidth = width / 2
     const sidePadding = 22
 
-    const buildHalfTemplate = (name: string, density: number) => {
+    const buildHalfTemplate = (name: string) => {
       const platforms: PlatformSpec[] = []
       const movingPlatforms: MovingPlatformSpec[] = []
       const itemZones: ItemZone[] = []
@@ -347,7 +348,6 @@ export default class MainScene extends Phaser.Scene {
         occupied.some((existing) => Phaser.Geom.Rectangle.Overlaps(existing, rect))
 
       for (let zoneIndex = 0; zoneIndex < zoneCount; zoneIndex += 1) {
-        const zoneTop = Math.max(cloudSafeTop, groundTop - zoneHeight * (zoneIndex + 1))
         const zoneBottom = Math.max(cloudSafeTop + zoneHeight * 0.4, groundTop - zoneHeight * zoneIndex)
         const zoneLeft = sidePadding
         const zoneRight = halfWidth - sidePadding
@@ -437,9 +437,9 @@ export default class MainScene extends Phaser.Scene {
     }
 
     const templates: LevelTemplate[] = [
-      buildHalfTemplate('sparse', 3),
-      buildHalfTemplate('balanced', 4),
-      buildHalfTemplate('dense', 5),
+      buildHalfTemplate('sparse'),
+      buildHalfTemplate('balanced'),
+      buildHalfTemplate('dense'),
     ]
 
     const halfTemplate = Phaser.Utils.Array.GetRandom(templates)
@@ -531,8 +531,12 @@ export default class MainScene extends Phaser.Scene {
     const cupcakeCount = Math.min(3, cupcakeZones.length)
     let cupcakesPlaced = 0
     for (let i = 0; i < cupcakeZones.length && cupcakesPlaced < cupcakeCount; i += 1) {
+      const zone = cupcakeZones[i]
+      if (!zone) {
+        continue
+      }
       const visual = this.getPickupVisual('cupcake')
-      const position = this.getPickupPosition('cupcake', cupcakeZones[i], visual, placedPickups, leftMaxX)
+      const position = this.getPickupPosition('cupcake', zone, visual, placedPickups, leftMaxX)
       if (!position) {
         continue
       }
@@ -540,7 +544,7 @@ export default class MainScene extends Phaser.Scene {
       placedPickups.push(this.getPickupRect(position.x, position.y, visual))
 
       const mirrorX = width - position.x
-      const mirrorZone = { ...cupcakeZones[i], x: width - cupcakeZones[i].x }
+      const mirrorZone = { ...zone, x: width - zone.x }
       const mirrorY = this.getCupcakeY(mirrorX, mirrorZone, visual.height)
       const mirrorRect = this.getPickupRect(mirrorX, mirrorY, visual)
       if (!this.isOverlappingPickups(mirrorRect, placedPickups)) {
@@ -557,6 +561,9 @@ export default class MainScene extends Phaser.Scene {
       const spawnCount = Math.min(zone.count, items.length, maxByWidth)
       for (let i = 0; i < spawnCount; i += 1) {
         const type = items[i]
+        if (!type) {
+          continue
+        }
         const visual = this.getPickupVisual(type)
         const position = this.getPickupPosition(type, zone, visual, placedPickups, leftMaxX)
         if (!position) {
@@ -700,7 +707,7 @@ export default class MainScene extends Phaser.Scene {
     this.pickupsRemaining += 1
   }
 
-  private collectPickup(player: PlayerInfo, pickup: Phaser.GameObjects.GameObject) {
+  private collectPickup(player: PlayerInfo, pickup: Phaser.GameObjects.Image | Phaser.GameObjects.Rectangle) {
     const type = pickup.getData('type') as string | undefined
     if (!type || type === 'cupcake') return
     pickup.destroy()
@@ -826,11 +833,11 @@ export default class MainScene extends Phaser.Scene {
     const anims = getUnicornAnimSet(player.variant)
     if (this.anims.exists(anims.eatStart)) {
       sprite.play(anims.eatStart, true)
-      sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, (anim) => {
+      sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, (anim: Phaser.Animations.Animation) => {
         if (anim.key !== anims.eatStart) return
         if (this.anims.exists(anims.eatEnd)) {
           sprite.play(anims.eatEnd, true)
-          sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, (endAnim) => {
+          sprite.once(Phaser.Animations.Events.ANIMATION_COMPLETE, (endAnim: Phaser.Animations.Animation) => {
             if (endAnim.key !== anims.eatEnd) return
             player.isEating = false
             this.activatePowerUp(player)
@@ -857,7 +864,8 @@ export default class MainScene extends Phaser.Scene {
     player.jumpMultiplier = 1.5
     player.powerUpUntil = this.time.now + 6000
 
-    if (player.sprite instanceof Phaser.GameObjects.Sprite) {
+    const sprite = player.sprite
+    if (sprite instanceof Phaser.GameObjects.Sprite) {
       const colors = [0xff3b3b, 0xffc857, 0x7ae582, 0x5cc8ff, 0xb96bff]
       let index = 0
       player.rainbowEvent?.remove(false)
@@ -865,7 +873,7 @@ export default class MainScene extends Phaser.Scene {
         delay: 120,
         loop: true,
         callback: () => {
-          player.sprite.setTint(colors[index % colors.length])
+          sprite.setTint(colors[index % colors.length])
           index += 1
         },
       })

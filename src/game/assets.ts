@@ -1,5 +1,7 @@
 import Phaser from 'phaser'
 
+const BASE_URL = import.meta.env.BASE_URL
+
 export const USE_ASSETS = true
 
 export const ASSET_KEYS = {
@@ -13,13 +15,13 @@ export const ASSET_KEYS = {
 }
 
 export const ASSET_PATHS = {
-  cloud: '/assets/rainbow_cloud.png',
-  cupcake: '/assets/cupcake.png',
-  flower: '/assets/flower.png',
-  grapes: '/assets/grapes.png',
-  heart: '/assets/heart.png',
-  star: '/assets/star.png',
-  strawberry: '/assets/strawberry.png',
+  cloud: `${BASE_URL}assets/rainbow_cloud.png`,
+  cupcake: `${BASE_URL}assets/cupcake.png`,
+  flower: `${BASE_URL}assets/flower.png`,
+  grapes: `${BASE_URL}assets/grapes.png`,
+  heart: `${BASE_URL}assets/heart.png`,
+  star: `${BASE_URL}assets/star.png`,
+  strawberry: `${BASE_URL}assets/strawberry.png`,
 }
 
 type FrameSequence = {
@@ -32,31 +34,31 @@ type FrameSequence = {
 export const UNICORN_FRAMES = {
   idle: {
     key: 'unicorn-idle',
-    path: '/assets/unicorn/animations/rest-idle/east/frame_',
+    path: `${BASE_URL}assets/unicorn/animations/rest-idle/east/frame_`,
     frames: 9,
     pad: 3,
   },
   eatStart: {
     key: 'unicorn-eat-start',
-    path: '/assets/unicorn/animations/eat-start/east/frame_',
+    path: `${BASE_URL}assets/unicorn/animations/eat-start/east/frame_`,
     frames: 6,
     pad: 3,
   },
   eatEnd: {
     key: 'unicorn-eat-end',
-    path: '/assets/unicorn/animations/eat-end/east/frame_',
+    path: `${BASE_URL}assets/unicorn/animations/eat-end/east/frame_`,
     frames: 7,
     pad: 3,
   },
   walk: {
     key: 'unicorn-walk',
-    path: '/assets/unicorn/animations/walk-6-frames/east/frame_',
+    path: `${BASE_URL}assets/unicorn/animations/walk-6-frames/east/frame_`,
     frames: 6,
     pad: 3,
   },
   jump: {
     key: 'unicorn-jump',
-    path: '/assets/unicorn/animations/attack/east/frame_',
+    path: `${BASE_URL}assets/unicorn/animations/attack/east/frame_`,
     frames: 6,
     pad: 3,
   },
@@ -195,17 +197,21 @@ export const createUnicornVariant = (scene: Phaser.Scene, variant: string) => {
       if (!sourceImage) continue
 
       const canvasTexture = scene.textures.createCanvas(targetKey, sourceImage.width, sourceImage.height)
+      if (!canvasTexture || !canvasTexture.context) {
+        canvasTexture?.destroy()
+        continue
+      }
       const ctx = canvasTexture.context
       ctx.drawImage(sourceImage, 0, 0)
       const imageData = ctx.getImageData(0, 0, sourceImage.width, sourceImage.height)
       const data = imageData.data
 
       for (let p = 0; p < data.length; p += 4) {
-        const alpha = data[p + 3]
+        const alpha = data[p + 3] ?? 0
         if (alpha === 0) continue
-        const r = data[p]
-        const g = data[p + 1]
-        const b = data[p + 2]
+        const r = data[p] ?? 0
+        const g = data[p + 1] ?? 0
+        const b = data[p + 2] ?? 0
         const distance = Math.abs(r - replaceFrom.r) + Math.abs(g - replaceFrom.g) + Math.abs(b - replaceFrom.b)
         const distanceDark = Math.abs(r - replaceFromDark.r) + Math.abs(g - replaceFromDark.g) + Math.abs(b - replaceFromDark.b)
         if (distance <= tolerance || distanceDark <= tolerance) {
@@ -214,9 +220,9 @@ export const createUnicornVariant = (scene: Phaser.Scene, variant: string) => {
           data[p + 2] = replaceTo.b
         }
 
-        data[p] = Math.round(data[p] * (1 - tintStrength) + tint.r * tintStrength)
-        data[p + 1] = Math.round(data[p + 1] * (1 - tintStrength) + tint.g * tintStrength)
-        data[p + 2] = Math.round(data[p + 2] * (1 - tintStrength) + tint.b * tintStrength)
+        data[p] = Math.round(r * (1 - tintStrength) + tint.r * tintStrength)
+        data[p + 1] = Math.round(g * (1 - tintStrength) + tint.g * tintStrength)
+        data[p + 2] = Math.round(b * (1 - tintStrength) + tint.b * tintStrength)
       }
 
       ctx.putImageData(imageData, 0, 0)
