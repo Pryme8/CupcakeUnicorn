@@ -38,8 +38,8 @@ watch(
   <section class="game-shell">
     <div class="game-frame" ref="containerRef"></div>
     <div class="game-hint">
-      <p>Move with WASD (Player 1) or arrows (Player 2). Jump with W or up.</p>
-      <p>Eat with S (Player 1) or down (Player 2).</p>
+      <p>Player 1 uses WASD, Player 2 uses the arrow keys. W or Up is your magic key: jump, flap, drop, tug, or hop!</p>
+      <p>Eight levels loop forever: Cupcake Chase, Pegasus Flight, Rainbow Garden Maze, Cupcake Catch, Tug of Rainbow, Mirror Dance, Balloon Pop, and Fruit Dash.</p>
     </div>
   </section>
 </template>

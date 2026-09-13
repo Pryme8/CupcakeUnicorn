@@ -52,13 +52,16 @@ const heroTagline = computed(() =>
             <li>Move, jump, and eat cupcakes to get a speed boost.</li>
             <li>Collect hearts, stars, flowers, grapes, and strawberries for points.</li>
             <li>Items fly to the rainbow cloud once collected.</li>
+            <li>Eight levels loop forever: chase cupcakes, fly as a Pegasus, explore a garden maze, catch falling cupcakes, tug a rainbow, copy a dance, pop balloons, and dash past rotten fruit.</li>
+            <li>Nobody ever loses. Every level is about collecting as many sparkles as you can.</li>
             <li>No timer, no health bar, just pure sparkle.</li>
           </ul>
         </div>
         <div class="controls">
           <h3>Controls</h3>
-          <p>Player 1: WASD (S to eat)</p>
-          <p>Player 2: Arrow keys (Down to eat)</p>
+          <p>Player 1: WASD (W is the magic key)</p>
+          <p>Player 2: Arrow keys (Up is the magic key)</p>
+          <p>Tapping your side of the screen works too.</p>
         </div>
         <div class="credits">
           <h3>Credits</h3>

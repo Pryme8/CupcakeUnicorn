@@ -1,4 +1,6 @@
 import Phaser from 'phaser'
+import { difficultyTier, startLevel } from '../levels'
+import { showLevelBanner } from '../levelKit'
 import { ASSET_KEYS, USE_ASSETS, UNICORN_VARIANTS, createUnicornAnimations, createUnicornVariant, getFrameKey, getUnicornAnimSet, getVariantFrameKey, loadAssets, UNICORN_FRAMES } from '../assets'
 
 type PlayerInfo = {
@@ -64,6 +66,8 @@ export default class MainScene extends Phaser.Scene {
   private roundInTransition = false
   private roundOverlay?: Phaser.GameObjects.Rectangle
   private roundTween?: Phaser.Tweens.Tween
+  private level = 1
+  private carriedScores: number[] = []
 
   constructor() {
     super('MainScene')
@@ -73,8 +77,14 @@ export default class MainScene extends Phaser.Scene {
     loadAssets(this)
   }
 
-  init(data: { playerCount?: 1 | 2 }) {
+  init(data: { playerCount?: 1 | 2; level?: number; scores?: number[] }) {
     this.playerCount = data.playerCount ?? 1
+    this.level = data.level ?? 1
+    this.carriedScores = data.scores ?? []
+    this.players = []
+    this.platforms = []
+    this.movingPlatforms = []
+    this.roundInTransition = false
   }
 
   create() {
@@ -127,9 +137,9 @@ export default class MainScene extends Phaser.Scene {
       this.platforms.forEach((platform) => {
         this.physics.add.collider(colliderObject, platform)
       })
-      player.score = 0
+      player.score = this.carriedScores[index] ?? 0
       const textX = index === 0 ? 24 : width - 24
-      player.scoreText = this.add.text(textX, 16, '0', {
+      player.scoreText = this.add.text(textX, 16, String(player.score), {
         fontFamily: '"Fredoka", sans-serif',
         fontSize: '22px',
         color: '#1f2a44',
@@ -151,56 +161,13 @@ export default class MainScene extends Phaser.Scene {
     })
 
     this.createWorldBounds()
+    showLevelBanner(this, this.level, 'Cupcake Chase!', { y: this.scale.height * 0.42 })
   }
 
   private createWorldBounds() {
     this.physics.world.setBounds(0, 0, this.scale.width, this.scale.height)
     this.players.forEach((player) => {
       player.body.setCollideWorldBounds(false)
-    })
-  }
-
-  private resetRound() {
-    this.platforms.forEach((platform) => platform.destroy())
-    this.platforms = []
-    this.movingPlatforms.forEach((entry) => entry.platform.destroy())
-    this.movingPlatforms = []
-    this.cupcakeGroup?.clear(true, true)
-    this.pickupGroup?.clear(true, true)
-
-    const template = this.createPlatforms()
-    this.createPickups(template)
-
-    const height = this.scale.height
-    const width = this.scale.width
-    const leftSpawn = { x: 80, y: height - 120 }
-    const rightSpawn = { x: width - 80, y: height - 120 }
-    const spawnPoints = this.playerCount === 2
-      ? [leftSpawn, rightSpawn]
-      : [Phaser.Math.Between(0, 1) === 0 ? leftSpawn : rightSpawn]
-
-    this.players.forEach((player, index) => {
-      const spawn = spawnPoints[Math.min(index, spawnPoints.length - 1)] ?? spawnPoints[0]
-      if (!spawn) {
-        return
-      }
-      player.isEating = false
-      this.clearPowerUp(player)
-      player.body.setVelocity(0, 0)
-      player.body.reset(spawn.x, spawn.y)
-      if (player.bodySprite) {
-        player.bodySprite.setPosition(spawn.x, spawn.y)
-      }
-      if (player.sprite instanceof Phaser.GameObjects.Sprite) {
-        player.sprite.setPosition(spawn.x, spawn.y)
-        player.sprite.setFlipX(spawn.x > width / 2)
-      }
-      player.wasGrounded = false
-
-      const colliderObject = player.bodySprite ?? player.sprite
-      this.platforms.forEach((platform) => {
-        this.physics.add.collider(colliderObject, platform)
-      })
     })
   }
 
@@ -236,15 +203,17 @@ export default class MainScene extends Phaser.Scene {
           if (cloud) {
             cloud.setScale(1)
           }
-          this.roundOverlay?.setAlpha(0)
-          this.resetRound()
-          this.roundInTransition = false
+          this.goToNextLevel()
         },
       })
     } else {
-      this.resetRound()
-      this.roundInTransition = false
+      this.goToNextLevel()
     }
+  }
+
+  private goToNextLevel() {
+    const scores = this.players.map((player) => player.score)
+    startLevel(this, { playerCount: this.playerCount, level: this.level + 1, scores })
   }
 
   private checkRoundEnd() {
@@ -333,6 +302,11 @@ export default class MainScene extends Phaser.Scene {
     const zoneHeight = usableHeight / zoneCount
     const halfWidth = width / 2
     const sidePadding = 22
+    // Later laps have more moving platforms, and they move faster.
+    const tier = difficultyTier(this.level)
+    const movingChance = 0.35 + tier * 0.08
+    const moveDurationMin = Math.max(1200, 2100 - tier * 220)
+    const moveDurationMax = Math.max(1800, 3100 - tier * 300)
 
     const buildHalfTemplate = (name: string) => {
       const platforms: PlatformSpec[] = []
@@ -376,7 +350,7 @@ export default class MainScene extends Phaser.Scene {
           const platformWidth = Math.max(90, rawWidth - 8)
           const platformX = zoneLeft + sectionWidth * (startIndex + length / 2)
           const platformY = Math.floor(zoneBottom - 11)
-          const allowMove = Phaser.Math.FloatBetween(0, 1) < 0.35
+          const allowMove = Phaser.Math.FloatBetween(0, 1) < movingChance
 
           if (allowMove) {
             const maxLeft = platformX - platformWidth / 2 - sidePadding
@@ -399,7 +373,7 @@ export default class MainScene extends Phaser.Scene {
                 height: 18,
                 rangeX,
                 rangeY,
-                duration: Phaser.Math.Between(2100, 3100),
+                duration: Phaser.Math.Between(moveDurationMin, moveDurationMax),
               })
               addOccupied(rect)
               itemZones.push({
@@ -1001,7 +975,7 @@ export default class MainScene extends Phaser.Scene {
           if ((player.wasGrounded || justJumped) && this.anims.exists(anims.jumpStart)) {
             player.sprite.play(anims.jumpStart, true)
           } else if (currentKey === anims.jumpStart && !player.sprite.anims.isPlaying) {
-            player.sprite.setFrame(getVariantFrameKey(UNICORN_FRAMES.jump, 3, player.variant))
+            player.sprite.setTexture(getVariantFrameKey(UNICORN_FRAMES.jump, 3, player.variant))
           }
         } else if (justLanded) {
           if (this.anims.exists(anims.jumpLand)) {

@@ -62,6 +62,12 @@ export const UNICORN_FRAMES = {
     frames: 6,
     pad: 3,
   },
+  fly: {
+    key: 'unicorn-fly',
+    path: `${BASE_URL}assets/unicorn/animations/running-6-frames/east/frame_`,
+    frames: 6,
+    pad: 3,
+  },
 } satisfies Record<string, FrameSequence>
 
 export const UNICORN_ANIMS = {
@@ -71,6 +77,7 @@ export const UNICORN_ANIMS = {
   walk: UNICORN_FRAMES.walk.key,
   jumpStart: 'unicorn-jump-start',
   jumpLand: 'unicorn-jump-land',
+  fly: UNICORN_FRAMES.fly.key,
 }
 
 export const UNICORN_VARIANTS = {
@@ -93,6 +100,7 @@ export const getUnicornAnimSet = (variant?: string) => ({
   walk: getVariantAnimKey(UNICORN_ANIMS.walk, variant),
   jumpStart: getVariantAnimKey(UNICORN_ANIMS.jumpStart, variant),
   jumpLand: getVariantAnimKey(UNICORN_ANIMS.jumpLand, variant),
+  fly: getVariantAnimKey(UNICORN_ANIMS.fly, variant),
 })
 
 export const loadAssets = (scene: Phaser.Scene) => {
@@ -101,17 +109,24 @@ export const loadAssets = (scene: Phaser.Scene) => {
   Object.values(UNICORN_FRAMES).forEach((sequence) => {
     for (let i = 0; i < sequence.frames; i += 1) {
       const key = getFrameKey(sequence, i)
+      if (scene.textures.exists(key)) continue
       scene.load.image(key, `${sequence.path}${String(i).padStart(sequence.pad, '0')}.png`)
     }
   })
 
-  scene.load.image(ASSET_KEYS.cloud, ASSET_PATHS.cloud)
-  scene.load.image(ASSET_KEYS.cupcake, ASSET_PATHS.cupcake)
-  scene.load.image(ASSET_KEYS.flower, ASSET_PATHS.flower)
-  scene.load.image(ASSET_KEYS.grapes, ASSET_PATHS.grapes)
-  scene.load.image(ASSET_KEYS.heart, ASSET_PATHS.heart)
-  scene.load.image(ASSET_KEYS.star, ASSET_PATHS.star)
-  scene.load.image(ASSET_KEYS.strawberry, ASSET_PATHS.strawberry)
+  const images: [string, string][] = [
+    [ASSET_KEYS.cloud, ASSET_PATHS.cloud],
+    [ASSET_KEYS.cupcake, ASSET_PATHS.cupcake],
+    [ASSET_KEYS.flower, ASSET_PATHS.flower],
+    [ASSET_KEYS.grapes, ASSET_PATHS.grapes],
+    [ASSET_KEYS.heart, ASSET_PATHS.heart],
+    [ASSET_KEYS.star, ASSET_PATHS.star],
+    [ASSET_KEYS.strawberry, ASSET_PATHS.strawberry],
+  ]
+  images.forEach(([key, path]) => {
+    if (scene.textures.exists(key)) return
+    scene.load.image(key, path)
+  })
 }
 
 export const createUnicornAnimations = (scene: Phaser.Scene) => {
@@ -173,6 +188,16 @@ export const createUnicornAnimations = (scene: Phaser.Scene) => {
       frames: [4, 5].map((index) => ({ key: getFrameKey(jump, index) })),
       frameRate: 12,
       repeat: 0,
+    })
+  }
+
+  const fly = UNICORN_FRAMES.fly
+  if (!scene.anims.exists(UNICORN_ANIMS.fly)) {
+    scene.anims.create({
+      key: UNICORN_ANIMS.fly,
+      frames: Array.from({ length: fly.frames }, (_, index) => ({ key: getFrameKey(fly, index) })),
+      frameRate: 10,
+      repeat: -1,
     })
   }
 }
@@ -287,6 +312,16 @@ export const createUnicornVariant = (scene: Phaser.Scene, variant: string) => {
       frames: [4, 5].map((index) => ({ key: getVariantFrameKey(jump, index, variant) })),
       frameRate: 12,
       repeat: 0,
+    })
+  }
+
+  const fly = UNICORN_FRAMES.fly
+  if (!scene.anims.exists(anims.fly)) {
+    scene.anims.create({
+      key: anims.fly,
+      frames: Array.from({ length: fly.frames }, (_, index) => ({ key: getVariantFrameKey(fly, index, variant) })),
+      frameRate: 10,
+      repeat: -1,
     })
   }
 }
