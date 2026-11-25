@@ -148,8 +148,16 @@ This project is configured to meet itch.io HTML5 ZIP requirements and common pit
 - Avoid absolute URLs or non-HTTPS external resources.
 - Keep the final ZIP under itch.io limits (<= 1,000 files, 500MB total, 200MB per file, max 240-char paths).
 
-Recommended upload steps:
+```bash
+npm run package:itch
+```
 
-1. Run `npm run build`.
-2. Zip the *contents* of `dist/` (not the folder itself) so `index.html` is at the ZIP root.
-3. Upload the ZIP to itch.io as an HTML5 game.
+That builds and writes `packages-out/cupcake-unicorn-itch.zip`, with `index.html`
+at the ZIP root as itch requires, ready to upload as an HTML5 game. It refuses
+to write a ZIP that would not upload cleanly, checking the four limits above
+plus two things a Windows build can hide: filenames that differ only in case,
+and characters some unzippers refuse. `--no-build` zips the existing `dist/`.
+
+The ZIP is written by `scripts/zip.mjs`, a small deflate writer, so packaging
+needs no dependency and the same `dist/` always produces byte-identical output —
+a rebuild that changed nothing has the same sha256.
