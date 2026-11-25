@@ -31,7 +31,7 @@ const heroTagline = computed(() =>
 </script>
 
 <template>
-  <main class="app-shell">
+  <main class="app-shell" :class="{ playing: screen !== 'landing' }">
     <section v-if="screen === 'landing'" class="landing">
       <header class="hero">
         <span class="hero-badge">Ages 4-6</span>

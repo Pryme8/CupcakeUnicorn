@@ -244,23 +244,85 @@ button:hover {
 }
 
 .skyjump-frame {
-  /* Height-led so the canvas fills the box exactly: Phaser FIT would
-     otherwise letterbox a too-wide frame with the background colour. */
-  height: min(86vh, 960px);
-  aspect-ratio: 540 / 960;
-  max-width: 100%;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 18px 40px rgba(42, 27, 61, 0.25);
-  background: #8e9bc4;
+  /* Just a box for Phaser to fit into, as big as the row it sits in allows.
+     It carries no shape of its own: giving it the 9:16 ratio meant that
+     whenever width was the binding constraint the box stayed too tall and
+     Phaser letterboxed the difference in its background colour. Phaser's FIT
+     already keeps the canvas at 9:16, so the ratio is its job alone and the
+     rounding and shadow belong on the canvas, which is the visible edge. */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Pixel art must not be resampled when the canvas is scaled to fit the box. */
 .skyjump-frame canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 24px;
+  box-shadow: 0 18px 40px rgba(42, 27, 61, 0.25);
 }
 
 .skyjump-shell .game-hint {
   width: min(100%, 640px);
+}
+
+/*
+ * Playing, in a window or in somebody's iframe.
+ *
+ * itch.io serves an HTML5 game in a frame of a size you pick, and a page laid
+ * out from the viewport does not survive that: at 960x720 the header card and
+ * the hint took 343px, the climber's 9:16 box was sized from vh on top of
+ * that, and the bottom of the playfield landed 71px below the fold — the part
+ * of a climber where you actually die. Making the shell fill the frame and the
+ * playfield take whatever is left means there is no size to get right.
+ */
+.app-shell.playing {
+  display: flex;
+  flex-direction: column;
+  /* A definite height, not a minimum: `flex: 1` below can only bound the
+     playfield row if there is a ceiling for it to divide up. With min-height
+     the frame kept its intrinsic 960px and pushed the page past the fold
+     again, which is the bug this whole block exists to fix. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  padding-block: clamp(8px, 2vh, 32px);
+}
+.app-shell.playing .game {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.app-shell.playing .skyjump-shell {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.app-shell.playing .game-shell {
+  min-height: 0;
+}
+
+/*
+ * Short or narrow frames: the chrome goes before the game does. Nothing is
+ * lost — the controls are on the in-game hint overlay too, and the header only
+ * repeats the name of the mode you just chose. Narrow counts as well as short
+ * because on a phone the 9:16 playfield is bounded by height, so every row of
+ * chrome costs width too.
+ */
+@media (max-height: 900px), (max-width: 700px) {
+  .app-shell.playing .game-hint {
+    display: none;
+  }
+  .app-shell.playing .game-header {
+    padding: 8px 14px;
+  }
+  .app-shell.playing .game-header p {
+    display: none;
+  }
 }
