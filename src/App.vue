@@ -10,6 +10,11 @@ type Screen = 'landing' | 'game' | 'skyjump'
 const requestedGame = new URLSearchParams(window.location.search).get('game')
 
 const screen = ref<Screen>(requestedGame === 'skyjump' ? 'skyjump' : 'landing')
+
+// How to Play, Controls and Credits are 530px of reference material. On a tall
+// window they are simply the page; in an itch.io embed they push the three mode
+// cards below the fold, so there they start folded and open on a click.
+const roomyEnough = typeof window === 'undefined' || window.innerHeight >= 900
 const playerCount = ref<1 | 2>(1)
 
 const startGame = (count: 1 | 2) => {
@@ -60,7 +65,9 @@ const heroTagline = computed(() =>
         </article>
       </section>
 
-      <section class="rules">
+      <details class="rules" :open="roomyEnough">
+        <summary>How to play, controls and credits</summary>
+        <div class="rules-grid">
         <div>
           <h3>How to Play</h3>
           <ul>
@@ -92,7 +99,8 @@ const heroTagline = computed(() =>
             >, the only reference left.
           </p>
         </div>
-      </section>
+        </div>
+      </details>
     </section>
 
     <section v-else-if="screen === 'skyjump'" class="game">
