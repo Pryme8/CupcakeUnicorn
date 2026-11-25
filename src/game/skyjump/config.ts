@@ -26,14 +26,61 @@ export const MOVEMENT = {
   bounceVelocity: 440 * V,
   /** Terminal velocity, ~1.3x the bounce, so a long drop stays readable. */
   maxFallSpeed: 1150,
-  /** Full-tilt steering: crosses the screen in ~1.07 s, as in the trailer. */
-  maxSteerSpeed: 300 * H,
-  /** Reaches full steer speed in ~0.2 s. */
-  steerAccel: (300 * H) / 0.2,
-  /** Coasts to a stop in ~0.35 s when nothing is held. */
-  steerDrag: (300 * H) / 0.35,
+  /**
+   * Steering. The trailer measures 300 * H (506 px/s) with a 0.2 s ramp, but
+   * that ramp feels sluggish on a keyboard, where you expect the turn to happen
+   * on the keypress. Top speed is nudged up and the ramp cut hard; the measured
+   * values are kept here so the trade is visible and easy to undo.
+   */
+  measuredSteerSpeed: 300 * H,
+  maxSteerSpeed: 360 * H,
+  /** Reaches full steer speed in ~0.06 s rather than the measured 0.2 s. */
+  steerAccel: (360 * H) / 0.06,
+  /** Coasts to a stop in ~0.09 s when nothing is held. */
+  steerDrag: (360 * H) / 0.09,
+  /**
+   * Turning against your own momentum accelerates harder, so a direction change
+   * bites immediately instead of first bleeding off the old speed.
+   */
+  reverseBoost: 2.6,
   /** Leaving one edge brings you back in at the other (classic, and forgiving). */
   wrapHorizontally: true,
+}
+
+/**
+ * Chain float. Chaining cloud undersides buys height fast, and the cost used to
+ * be brutal: miss one and you dropped from the top of a long climb at full
+ * gravity with nothing under you — in limbo. Float is the refund. Every link in
+ * a chain banks a little hang time, and while that time is running the top of
+ * each hop is softer and you do not pick up speed as fast on the way down, so a
+ * missed line is a chance to steer rather than an instant plummet.
+ *
+ * It only ever touches the fall. An unchained hop still rises and lands on the
+ * trailer's measured 0.98 s, so the baseline timing is untouched.
+ */
+export const FLOAT = {
+  /** Gravity multiplier at the very top of a hop on a full chain. 1 = no float. */
+  apexGravity: 0.3,
+  /** Fall speed, px/s, by which the float has faded back to normal gravity. */
+  apexWindow: 520,
+  /**
+   * Terminal velocity is held to this fraction of the usual on a full chain.
+   * This is the number that matters: 0.48 is ~550 px/s, barely faster than the
+   * camera's own 500 px/s descent, so while the bank lasts the bottom of the
+   * screen closes on you slowly instead of swallowing you.
+   */
+  fallFraction: 0.48,
+  /** Hang time banked per link. A cloud bounce is one link, a butterfly half. */
+  secondsPerLink: 0.35,
+  /** Cap on banked time. */
+  maxSeconds: 1.4,
+  /**
+   * The float runs at full strength for as long as there is time in the bank
+   * and only eases off over this last stretch of it. Scaling strength with the
+   * whole bank instead was the first attempt and it was useless: the float had
+   * half faded before you had finished looking for somewhere to land.
+   */
+  releaseSeconds: 0.35,
 }
 
 export const PLAYER = {
@@ -123,6 +170,17 @@ export const CLOUD = {
 
   /** Clouds this far below the camera are recycled. */
   cullBelow: 160,
+
+  /**
+   * One-use clouds. Off by default: a cloud stays put and can be landed on
+   * again, which is how it plays now. On, a cloud puffs out as soon as you
+   * bounce off it (top or underside), so the ladder burns away behind you and
+   * a missed line cannot be retried.
+   *
+   * Toggle it live with the V key, or open the game with ?vanish=1, so the two
+   * can be compared back to back rather than argued about.
+   */
+  vanishOnBounce: false,
 }
 
 export const BUTTERFLY = {

@@ -64,8 +64,32 @@ The original screen was 320 x 480. Pegasus Jump runs at **540 x 960**.
 | Bounce velocity | 440 px/s | **880 px/s** |
 | Jump apex | 110 px | **215 px** |
 | Hang time | 1.0 s | **0.98 s** |
-| Max steer speed | 300 px/s | **506 px/s** |
+| Max steer speed | 300 px/s | **506 px/s** (raised to 608, see below) |
 | Climb per bounce | ~97 px | **~195 px** |
+
+## Where the game deliberately departs from this
+
+**Chain float.** Nothing in the trailer shows it, and a plain hop here still
+matches the measurement exactly — 219 px of apex, 0.498 s up, 1.000 s round
+trip. What the measurement cannot see is how the game feels when a long chain
+of underside bounces ends: you are at the top of a fast climb with nothing
+under you, and at the measured gravity that is simply a death. So a chain banks
+hang time (`FLOAT` in config.ts) and spends it on the way down only. On a full
+bank the same hop takes 1.210 s instead of 1.000, the first 400 px of the drop
+take 1.04 s instead of 0.68, and a clean miss gives 2.49 s before the bottom of
+the screen catches you instead of 1.81. The rise is untouched in every case.
+
+Measured over 40 seeded bot runs of up to 3 minutes, the float takes deaths
+from 26/40 to 4/40 and lifts the median climb from 3982 m to 5208 m — most of
+that from the runs that used to end early, whose worst case goes from 9 m to
+691 m.
+
+Steering is the one place the measurement was overruled. The trailer's 0.2 s
+ramp to full tilt reads as lag on a keyboard, where the turn is expected on the
+keypress, so Pegasus Jump reaches full speed in 0.067 s, reverses in 0.083 s and
+tops out at 608 px/s rather than 506. The measured figure is kept in
+`MOVEMENT.measuredSteerSpeed` so the trade stays visible. Nothing vertical was
+touched: the apex is still 216 px and the period still 1.000 s.
 
 ## Caveats
 

@@ -60,25 +60,49 @@ for the measurements and how they were taken.
 - **Butterflies** bounce you in either direction and build a chain: each one in
   a row adds 7% lift up to +45%, and the chain lapses after 3.2 s without one.
 - **Cupcakes** are rare and are a **Super Jump**: 2.1x the normal bounce, an apex
-  of about a full screen, a rainbow trail and 25 points.
+  of about a full screen, a rainbow trail, the wings out, and 25 points.
+- **Chain float.** Chaining undersides buys height fast, and without a refund the
+  cost is brutal: miss one and you drop from the top of a long climb at full
+  gravity with nothing beneath you. So every link banks a little hang time (a
+  cloud 0.35 s, a butterfly half that, up to 1.4 s), and while the bank lasts the
+  top of each hop is softer and the fall is held near the camera's own descent
+  speed. A missed line becomes a chance to steer rather than a plummet. It only
+  ever touches the fall: an unchained hop still rises and lands on the measured
+  0.98 s. Measured over a full chain, the time from a clean miss to falling off
+  the bottom goes from 1.81 s to 2.49 s, and the first 400 px of the drop takes
+  1.04 s instead of 0.68.
+- **One-use clouds** are an option, not the default — `CLOUD.vanishOnBounce`,
+  the `V` key mid-run, or `?vanish=1`. A cloud puffs out as soon as you bounce
+  off it, so the ladder burns away behind you. It plays as a different, much
+  harder game rather than a harder setting: over 40 seeded bot runs the median
+  climb falls from 5208 m to 331 m and every run dies inside 15 s, because the
+  float cannot refund a ladder that is no longer there. Tightening the gap band
+  to 95-140 brings the median back to ~1050 m if it is ever wanted as a hard
+  mode.
 
 ### Art
 
 Everything on screen sits on **one pixel grid**: `PIXEL` world px per art px, set
 in `pixelArt.ts`. Mixed pixel sizes are the one thing that stops a screen reading
-as a single piece of art, so the clouds, butterflies, wings, cupcake and Pegasus
-all share it. The grid is fine (2), not chunky, because the 2D game's sprites are
+as a single piece of art, so the clouds, butterflies, cupcake and Pegasus all
+share it. The grid is fine (2), not chunky, because the 2D game's sprites are
 painted rather than pixel art.
 
 - Clouds and butterflies are generated at that density (26-75 art px) with hard
   edges and a one-pixel outline — rasterised, not scaled-up vector shapes.
 - The unicorn (56 px) and cupcake (32 px) are resampled to 50 and 30 and drawn at
   `PIXEL`, so they land on the same grid losing almost nothing.
-- The wings are the 2D game's own vector wing, rendered at three angles and
-  resampled by the same factor. Poses are baked into frames because rotating a
-  pixel sprite at runtime shears its grid.
+- The wings are the exception, and deliberately so: they are the 2D game's own
+  vector wing, rotated live exactly as the flight level does it. Resampling them
+  onto the grid was tried first and lost the shape that makes a wing read as a
+  wing. They are only on screen during a Super Jump, so the inconsistency is
+  brief and reads as the cupcake's doing.
 - Sprite positions are snapped to the grid, and bounce feedback is a whole-pixel
   shove rather than a scale tween, for the same reason.
+- The Pegasus is never rotated either. Instead the frame is chosen from vertical
+  velocity: the jump (attack) poses the other levels use, ordered rear-up,
+  gather, level, reach, dive. The running loop was there first and read as
+  galloping on the spot.
 
 It runs in its own portrait (540x960) Phaser instance rather than joining the
 level rotation, and splits in two:
@@ -94,8 +118,11 @@ Reach the mode from the "Pegasus Jump" card on the landing page, or open the dev
 server with `?game=skyjump`. In dev the game instance is on
 `window.__pegasusJump`.
 
-Controls: hold Left/Right (or A/D), or drag anywhere on the canvas. Space or a
-tap restarts after a fall.
+Controls: hold Left/Right (or A/D), or click once on the canvas to take the
+controls with the mouse — after that the Pegasus follows the pointer with no
+button held, and how far away the pointer is sets how hard it steers, so you can
+ease onto a cloud. Touching the keyboard hands the controls back to it. Space or
+a click restarts after a fall. `V` toggles one-use clouds mid-run.
 
 ## Development
 

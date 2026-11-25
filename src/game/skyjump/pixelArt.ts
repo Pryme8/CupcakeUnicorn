@@ -5,7 +5,7 @@ import Phaser from 'phaser'
  *
  * The rule the whole look depends on: **every sprite is drawn at exactly
  * `PIXEL` world px per art px.** Mixed pixel sizes are the one thing that stops
- * a screen reading as a single piece of art, so the clouds, butterflies, wings,
+ * a screen reading as a single piece of art, so the clouds, butterflies,
  * cupcake and Pegasus all share this grid.
  *
  * The 2D game's sprites are painted rather than chunky, so the grid is fine (2),
@@ -322,7 +322,6 @@ const sourceOf = (scene: Phaser.Scene, key: string) =>
 /** 50 x PIXEL = 100 world px, and only a 56 -> 50 step down from native. */
 export const UNICORN_ART = 50
 export const CUPCAKE_ART = 30
-export const PX_UNICORN_ANIM = 'skyjump-px-unicorn-fly'
 export const PX_CUPCAKE = 'skyjump-px-cupcake'
 export const pxUnicornFrame = (index: number) => `skyjump-px-unicorn-${index}`
 
@@ -340,68 +339,6 @@ const createQuantizedActors = (scene: Phaser.Scene, unicornFrames: string[], cup
     if (canvas) adopt(scene, PX_CUPCAKE, canvas)
   }
 
-  const available = unicornFrames.map((_, i) => pxUnicornFrame(i)).filter((k) => scene.textures.exists(k))
-  if (available.length && !scene.anims.exists(PX_UNICORN_ANIM)) {
-    scene.anims.create({
-      key: PX_UNICORN_ANIM,
-      frames: available.map((key) => ({ key })),
-      frameRate: 10,
-      repeat: -1,
-    })
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Wings
-// ---------------------------------------------------------------------------
-
-/**
- * The 2D game already has a wing, drawn with vectors. Rather than redraw it,
- * each flap pose is rendered from that art at an angle and then resampled onto
- * the grid: the pose is baked into the frame, so nothing is rotated at runtime
- * (rotating a pixel sprite shears its own grid).
- */
-/** Resample factor shared with the unicorn, so the wing has the same density. */
-const NATIVE_TO_ART = UNICORN_ART / 56
-export const WING_ANIM = 'skyjump-px-wing'
-export const wingKey = (frame: number) => `skyjump-px-wing-${frame}`
-const WING_ANGLES = [-0.5, 0.05, 0.6]
-
-const createWings = (scene: Phaser.Scene, sourceKey: string) => {
-  const src = sourceOf(scene, sourceKey)
-  if (!src?.width) return
-
-  WING_ANGLES.forEach((angle, frame) => {
-    if (scene.textures.exists(wingKey(frame))) return
-    // Canvas just big enough for the rotated art: padding beyond that would
-    // spend art pixels on empty space and shrink the wing on the grid.
-    const cos = Math.abs(Math.cos(angle))
-    const sin = Math.abs(Math.sin(angle))
-    const spin = document.createElement('canvas')
-    spin.width = Math.ceil(src.width * cos + src.height * sin)
-    spin.height = Math.ceil(src.width * sin + src.height * cos)
-    const sctx = spin.getContext('2d')
-    if (!sctx) return
-    sctx.translate(spin.width / 2, spin.height / 2)
-    sctx.rotate(angle)
-    sctx.drawImage(src, -src.width / 2, -src.height / 2)
-
-    const canvas = resample(
-      spin as unknown as Source,
-      Math.max(1, Math.round(spin.width * NATIVE_TO_ART)),
-      Math.max(1, Math.round(spin.height * NATIVE_TO_ART))
-    )
-    if (canvas) adopt(scene, wingKey(frame), canvas)
-  })
-
-  if (!scene.anims.exists(WING_ANIM) && scene.textures.exists(wingKey(0))) {
-    scene.anims.create({
-      key: WING_ANIM,
-      frames: [0, 1, 2, 1].map((frame) => ({ key: wingKey(frame) })),
-      frameRate: 12,
-      repeat: -1,
-    })
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -447,17 +384,11 @@ const createHaze = (scene: Phaser.Scene) => {
   g.destroy()
 }
 
-export const createPixelArt = (
-  scene: Phaser.Scene,
-  unicornFrames: string[],
-  cupcakeKey: string,
-  wingSourceKey: string
-) => {
+export const createPixelArt = (scene: Phaser.Scene, unicornFrames: string[], cupcakeKey: string) => {
   createClouds(scene)
   createButterflies(scene)
   createHudIcon(scene)
   createSparkle(scene)
   createHaze(scene)
   createQuantizedActors(scene, unicornFrames, cupcakeKey)
-  createWings(scene, wingSourceKey)
 }

@@ -10,7 +10,7 @@
  * screen space.
  */
 
-import { BUTTERFLY, CAMERA, CLOUD, CUPCAKE, MOVEMENT, PLAYER, SCORE, VIEW } from './config'
+import { BUTTERFLY, CAMERA, CLOUD, CUPCAKE, FLOAT, MOVEMENT, PLAYER, SCORE, VIEW } from './config'
 
 // ---------------------------------------------------------------------------
 // Random numbers
@@ -87,14 +87,21 @@ export type Player = {
 export type Phase = 'playing' | 'dead'
 
 export type GameEvent =
-  /** `underside: true` means it was clipped on the way up, not landed on. */
-  | { type: 'bounce'; source: 'cloud'; x: number; y: number; id: number; underside: boolean }
+  /**
+   * `underside: true` means it was clipped on the way up, not landed on.
+   * `vanished: true` means the cloud was spent and has left the simulation.
+   */
+  | { type: 'bounce'; source: 'cloud'; x: number; y: number; id: number; underside: boolean; vanished: boolean }
   | { type: 'bounce'; source: 'butterfly'; x: number; y: number; id: number; boost: number; chain: number }
   | { type: 'super'; x: number; y: number; id: number }
   | { type: 'death'; x: number; y: number }
 
 export type Input = {
-  /** -1 left, 0 none, 1 right. */
+  /**
+   * -1 to 1. Keys give the full -1 or 1; a pointer gives the fraction in
+   * between, which caps the top speed proportionally so you can ease onto a
+   * cloud instead of always running flat out.
+   */
   steer: number
 }
 
@@ -125,7 +132,18 @@ export class SkyJumpCore {
   chain = 0
   /** Counts down after a cupcake; the view draws the rainbow trail while it runs. */
   superTimer = 0
+  /**
+   * Banked hang time, in seconds. Topped up by every link in a chain and spent
+   * by simply existing; while it is running the fall is softened. See FLOAT.
+   */
+  floatTimer = 0
   elapsed = 0
+
+  /**
+   * One-use clouds. Lives on the instance rather than being read from config
+   * each time so it can be flipped mid-run for a side-by-side comparison.
+   */
+  vanishOnBounce = CLOUD.vanishOnBounce
 
   /** Drained by the renderer every frame; the core never keeps them. */
   readonly events: GameEvent[] = []
@@ -157,6 +175,15 @@ export class SkyJumpCore {
     return this.superTimer > 0
   }
 
+  /**
+   * 0..1 strength of the chain float — full while there is time in the bank,
+   * easing out over its last FLOAT.releaseSeconds. Drives the softer apex and
+   * the lower fall cap, and the view fades the glide trail with it.
+   */
+  get floatFraction() {
+    return Math.min(1, this.floatTimer / FLOAT.releaseSeconds)
+  }
+
   /** 0..1 ramp used to scale difficulty with height. */
   private get difficulty() {
     return Math.min(1, Math.max(0, (this.metres - CLOUD.driftStartMetre) / CLOUD.driftRampMetres))
@@ -177,6 +204,7 @@ export class SkyJumpCore {
     this.cupcakesEaten = 0
     this.chain = 0
     this.superTimer = 0
+    this.floatTimer = 0
     this.sinceCatch = Infinity
     this.elapsed = 0
 
@@ -235,11 +263,16 @@ export class SkyJumpCore {
     if (this.player.y > this.peakY) this.peakY = this.player.y
   }
 
-  private steer(dt: number, steer: number) {
+  private steer(dt: number, input: number) {
     const p = this.player
+    const steer = Math.max(-1, Math.min(1, input))
     if (steer !== 0) {
-      p.vx += Math.sign(steer) * MOVEMENT.steerAccel * dt
-      p.vx = Math.max(-MOVEMENT.maxSteerSpeed, Math.min(MOVEMENT.maxSteerSpeed, p.vx))
+      // Turning into your own momentum accelerates harder, so the change of
+      // direction is felt on the keypress rather than after a slide.
+      const against = steer * p.vx < 0
+      p.vx += steer * MOVEMENT.steerAccel * (against ? MOVEMENT.reverseBoost : 1) * dt
+      const cap = MOVEMENT.maxSteerSpeed * Math.abs(steer)
+      p.vx = Math.max(-cap, Math.min(cap, p.vx))
       p.facing = steer > 0 ? 1 : -1
     } else if (p.vx !== 0) {
       const drop = MOVEMENT.steerDrag * dt
@@ -265,9 +298,33 @@ export class SkyJumpCore {
 
   private fall(dt: number) {
     const p = this.player
-    p.vy -= MOVEMENT.gravity * dt
-    if (p.vy < -MOVEMENT.maxFallSpeed) p.vy = -MOVEMENT.maxFallSpeed
+    // Banked float is spent going down, never on the way up: a chain's hang
+    // time is there for the fall that ends it.
+    if (p.vy <= 0 && this.floatTimer > 0) this.floatTimer = Math.max(0, this.floatTimer - dt)
+    p.vy -= this.gravityNow() * dt
+    const cap = MOVEMENT.maxFallSpeed * (1 - (1 - FLOAT.fallFraction) * this.floatFraction)
+    if (p.vy < -cap) p.vy = -cap
     p.y += p.vy * dt
+  }
+
+  /**
+   * Gravity for this step. The rise is always the measured value — only the top
+   * of the hop and the drop are softened, and only by however much chain float
+   * is banked. With nothing banked this returns MOVEMENT.gravity exactly.
+   */
+  private gravityNow() {
+    const p = this.player
+    if (p.vy > 0) return MOVEMENT.gravity
+    const f = this.floatFraction
+    if (f === 0) return MOVEMENT.gravity
+    // Strongest at the apex, gone by the time you are falling at apexWindow.
+    const taper = 1 - Math.min(1, -p.vy / FLOAT.apexWindow)
+    return MOVEMENT.gravity * (1 - (1 - FLOAT.apexGravity) * f * taper)
+  }
+
+  /** Banks hang time for a link in a chain. */
+  private bankFloat(links: number) {
+    this.floatTimer = Math.min(FLOAT.maxSeconds, this.floatTimer + FLOAT.secondsPerLink * links)
   }
 
   private driftClouds(dt: number) {
@@ -340,7 +397,7 @@ export class SkyJumpCore {
       cloud.bounced = true
       p.y = cloud.y + PLAYER.feetOffset
       p.vy = MOVEMENT.bounceVelocity
-      this.events.push({ type: 'bounce', source: 'cloud', x: cloud.x, y: cloud.y, id: cloud.id, underside: false })
+      this.spend(cloud, cloud.y, false)
       return
     }
   }
@@ -361,9 +418,17 @@ export class SkyJumpCore {
       if (Math.abs(p.x - cloud.x) > cloud.halfWidth + PLAYER.halfWidth * 0.5) continue
       cloud.bounced = true
       p.vy = Math.max(p.vy, MOVEMENT.bounceVelocity)
-      this.events.push({ type: 'bounce', source: 'cloud', x: cloud.x, y: underside, id: cloud.id, underside: true })
+      this.spend(cloud, underside, true)
       return
     }
+  }
+
+  /** Reports the bounce and, with one-use clouds on, retires the cloud. */
+  private spend(cloud: Cloud, y: number, underside: boolean) {
+    this.bankFloat(1)
+    const vanished = this.vanishOnBounce
+    if (vanished) this.clouds = this.clouds.filter((c) => c !== cloud)
+    this.events.push({ type: 'bounce', source: 'cloud', x: cloud.x, y, id: cloud.id, underside, vanished })
   }
 
   private eatCupcake(c: Cupcake) {
@@ -379,6 +444,7 @@ export class SkyJumpCore {
     this.butterfliesCaught += 1
     this.chain += 1
     this.sinceCatch = 0
+    this.bankFloat(0.5)
     const boost = Math.min(BUTTERFLY.maxBoost, this.chain * BUTTERFLY.boostPerCatch)
     this.player.vy = MOVEMENT.bounceVelocity * (1 + boost)
     this.events.push({ type: 'bounce', source: 'butterfly', x: b.x, y: b.y, id: b.id, boost, chain: this.chain })
