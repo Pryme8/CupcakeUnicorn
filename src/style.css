@@ -153,6 +153,16 @@ body {
 .credits p {
   margin: 6px 0;
 }
+/* The provenance line, set apart from the names above it. */
+.credits .credit-note {
+  margin-top: 14px;
+  font-size: 0.9em;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+.credits .credit-note a {
+  color: inherit;
+}
 
 button {
   border: none;

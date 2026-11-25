@@ -84,6 +84,13 @@ const heroTagline = computed(() =>
           <p>Daisy Butt - Creator</p>
           <p>Dahlia Butt - Co Creator</p>
           <p>Special thanks: Andrew Butt - Dad (Prompt Engineering)</p>
+          <p class="credit-note">
+            Pegasus Jump is a remake of <em>Kitten Jump</em>, an iPhone game that can no longer be
+            found. Its jump arc, hang time and climb rate were measured from
+            <a href="https://www.youtube.com/watch?v=mND9LnoQLsI" target="_blank" rel="noopener noreferrer"
+              >its trailer</a
+            >, the only reference left.
+          </p>
         </div>
       </section>
     </section>
