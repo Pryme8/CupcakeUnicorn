@@ -35,6 +35,68 @@ The level order lives in `src/game/levels.ts`; shared helpers (banners, sparkles
 
 Tip for testing: open the dev server with `?level=N` to jump straight to that level (`?level=14` is Mirror Dance on its second pass, with the other player leading).
 
+## Pegasus Jump (bonus mode)
+
+A separate, single-player endless climber: the Pegasus bounces on its own
+forever and the only thing you control is left and right. Catch butterflies for
+a bigger bounce and a chain bonus, land on clouds on the way down, and don't
+fall off the bottom. There is no finish line, just a high score (kept in
+`localStorage`).
+
+It is a remake of **Kitten Jump** for iPhone/iPod, a game that has since
+vanished. The only reference left is its trailer, so the jump arc, hang time,
+climb rate and steering speed were measured off the video frame by frame and
+rescaled to this game's screen - see [docs/skyjump-timing.md](docs/skyjump-timing.md)
+for the measurements and how they were taken.
+
+### How it flows
+
+- **Clouds catch you two ways.** Falling onto the top of a cloud bounces you, as
+  you would expect. Clipping a cloud's **underside** on the way *up* re-launches
+  you on the spot and you carry straight on through it — so a good line chains
+  bounce after bounce instead of waiting out each fall. Measured against a
+  column of clouds, chaining undersides climbs at ~630 px/s against ~200 for
+  plain bouncing. This is the single most important feel in the original.
+- **Butterflies** bounce you in either direction and build a chain: each one in
+  a row adds 7% lift up to +45%, and the chain lapses after 3.2 s without one.
+- **Cupcakes** are rare and are a **Super Jump**: 2.1x the normal bounce, an apex
+  of about a full screen, a rainbow trail and 25 points.
+
+### Art
+
+Everything on screen sits on **one pixel grid**: `PIXEL` world px per art px, set
+in `pixelArt.ts`. Mixed pixel sizes are the one thing that stops a screen reading
+as a single piece of art, so the clouds, butterflies, wings, cupcake and Pegasus
+all share it. The grid is fine (2), not chunky, because the 2D game's sprites are
+painted rather than pixel art.
+
+- Clouds and butterflies are generated at that density (26-75 art px) with hard
+  edges and a one-pixel outline — rasterised, not scaled-up vector shapes.
+- The unicorn (56 px) and cupcake (32 px) are resampled to 50 and 30 and drawn at
+  `PIXEL`, so they land on the same grid losing almost nothing.
+- The wings are the 2D game's own vector wing, rendered at three angles and
+  resampled by the same factor. Poses are baked into frames because rotating a
+  pixel sprite at runtime shears its grid.
+- Sprite positions are snapped to the grid, and bounce feedback is a whole-pixel
+  shove rather than a scale tween, for the same reason.
+
+It runs in its own portrait (540x960) Phaser instance rather than joining the
+level rotation, and splits in two:
+
+- `src/game/skyjump/core.ts` - the whole simulation, pure TypeScript with no
+  Phaser, no DOM and no timers. Seeded RNG, so a run can be replayed exactly.
+- `src/game/skyjump/SkyJumpScene.ts` - the view. It owns no rules: each frame it
+  steps the core and moves sprites to match.
+- `src/game/skyjump/config.ts` - every tunable number, each traceable back to
+  the trailer measurements. Change the feel here, not in the core.
+
+Reach the mode from the "Pegasus Jump" card on the landing page, or open the dev
+server with `?game=skyjump`. In dev the game instance is on
+`window.__pegasusJump`.
+
+Controls: hold Left/Right (or A/D), or drag anywhere on the canvas. Space or a
+tap restarts after a fall.
+
 ## Development
 
 Install dependencies:

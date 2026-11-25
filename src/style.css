@@ -235,3 +235,32 @@ button:hover {
     gap: 12px;
   }
 }
+
+/* Pegasus Jump: a tall portrait column, centred, capped so it fits a laptop. */
+.skyjump-shell {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.skyjump-frame {
+  /* Height-led so the canvas fills the box exactly: Phaser FIT would
+     otherwise letterbox a too-wide frame with the background colour. */
+  height: min(86vh, 960px);
+  aspect-ratio: 540 / 960;
+  max-width: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(42, 27, 61, 0.25);
+  background: #8e9bc4;
+}
+
+/* Pixel art must not be resampled when the canvas is scaled to fit the box. */
+.skyjump-frame canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.skyjump-shell .game-hint {
+  width: min(100%, 640px);
+}

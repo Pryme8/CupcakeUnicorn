@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import GameView from './components/GameView.vue'
+import SkyJumpView from './components/SkyJumpView.vue'
 
-type Screen = 'landing' | 'game'
+type Screen = 'landing' | 'game' | 'skyjump'
 
-const screen = ref<Screen>('landing')
+// ?game=skyjump drops straight into the endless climber, the same way
+// ?level=N jumps into a level of the main game.
+const requestedGame = new URLSearchParams(window.location.search).get('game')
+
+const screen = ref<Screen>(requestedGame === 'skyjump' ? 'skyjump' : 'landing')
 const playerCount = ref<1 | 2>(1)
 
 const startGame = (count: 1 | 2) => {
   playerCount.value = count
   screen.value = 'game'
+}
+
+const startSkyJump = () => {
+  screen.value = 'skyjump'
 }
 
 const returnToLanding = () => {
@@ -43,6 +52,12 @@ const heroTagline = computed(() =>
           <p>Race a friend from opposite corners. Grab the most hearts and stars.</p>
           <button class="secondary" type="button" @click="startGame(2)">Start Duo</button>
         </article>
+
+        <article class="mode-card">
+          <h2>Pegasus Jump</h2>
+          <p>Solo high-score climb. Bounce forever, chase butterflies, never touch the bottom.</p>
+          <button class="primary" type="button" @click="startSkyJump">Start Climbing</button>
+        </article>
       </section>
 
       <section class="rules">
@@ -71,6 +86,17 @@ const heroTagline = computed(() =>
           <p>Special thanks: Andrew Butt - Dad (Prompt Engineering)</p>
         </div>
       </section>
+    </section>
+
+    <section v-else-if="screen === 'skyjump'" class="game">
+      <div class="game-header">
+        <div>
+          <h2>Pegasus Jump</h2>
+          <p>How high can you get?</p>
+        </div>
+        <button class="ghost" type="button" @click="returnToLanding">Back to Menu</button>
+      </div>
+      <SkyJumpView />
     </section>
 
     <section v-else class="game">
