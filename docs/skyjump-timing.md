@@ -67,6 +67,36 @@ The original screen was 320 x 480. Pegasus Jump runs at **540 x 960**.
 | Max steer speed | 300 px/s | **506 px/s** (raised to 608, see below) |
 | Climb per bounce | ~97 px | **~195 px** |
 
+## Zones
+
+Everything measured here is the sky, which is the only thing the trailer shows.
+Above it the game leaves the trailer behind on purpose — see `ZONES` in
+`config.ts` for the table and the README for what each zone plays like.
+
+The one measurement worth recording here is the pacing, because it is what the
+zone thresholds are set from. Six bot runs per zone, four minutes each, dropped
+in at the zone border:
+
+| Zone | Gravity | Climb | Survived 4 min | Leg to the next zone |
+| --- | --- | --- | --- | --- |
+| Sky | 1.00 | 674 px/s | 4/6 | 0.49 h |
+| Atmosphere | 0.86 | 532 px/s | 6/6 | 3.46 h |
+| Space | 0.50 | 787 px/s | 3/6 | 8.82 h |
+| Heaven | 0.34 | 905 px/s | 6/6 | — |
+
+Cumulative to Heaven: **12.78 hours on a single run**. The rate holds roughly
+steady across zones, which is the point — apex is `v²/2g` and the period `2v/g`,
+so the climb is `v/4` whatever gravity is, and only `metresPerPx` changes.
+
+Two balance findings came out of that table rather than out of taste. Space
+first killed five bot runs in six against two everywhere else: a hop there lasts
+twice as long, so a platform drifting at the same px/s slid 2.8x further out from
+under you. Drift speed now scales with gravity, which is what keeps *distance
+drifted per hop* constant, and Space went to 3/6. The saucer tow was the other
+suspect and turned out not to be the cause, but it was setting `vx` outright and
+taking the run out of the player's hands, so it now adds to your own motion and
+caps at 1.3x normal steering.
+
 ## Where the game deliberately departs from this
 
 **Chain float.** Nothing in the trailer shows it, and a plain hop here still

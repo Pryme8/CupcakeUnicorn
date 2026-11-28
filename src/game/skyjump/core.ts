@@ -10,7 +10,23 @@
  * screen space.
  */
 
-import { BUTTERFLY, CAMERA, CLOUD, CUPCAKE, FLOAT, MOVEMENT, PLAYER, SCORE, VIEW } from './config'
+import {
+  BUTTERFLY,
+  CAMERA,
+  CLOUD,
+  CUPCAKE,
+  FLOAT,
+  MOVEMENT,
+  PLAYER,
+  SCORE,
+  VIEW,
+  ZONES,
+  metresAtPx,
+  zoneIndexAtPx,
+  type PickupKind,
+  type PlatformKind,
+  type Zone,
+} from './config'
 
 // ---------------------------------------------------------------------------
 // Random numbers
@@ -40,13 +56,17 @@ export type Cloud = {
   id: number
   x: number
   y: number
-  /** Which of the three cloud sprites this is (0 small .. 2 large). */
+  /** Which of the three sprites this is (0 small .. 2 large). */
   size: number
   halfWidth: number
-  /** px/s; 0 for a cloud that holds station. */
+  /** px/s; 0 for one that holds station. */
   driftVx: number
   /** Set the first time the player bounces off it, for the renderer's squash. */
   bounced: boolean
+  /** What it looks like, and what it is: a cloud in the sky, a saucer in space. */
+  kind: PlatformKind
+  /** Sideways shove on bounce, in px/s. Only a saucer has one. */
+  tow: number
 }
 
 export type Butterfly = {
@@ -63,6 +83,8 @@ export type Butterfly = {
   /** Index into the renderer's palette. */
   colour: number
   caught: boolean
+  /** Butterfly in the air, star in space, feather in heaven. */
+  kind: PickupKind
 }
 
 export type Cupcake = {
@@ -92,7 +114,18 @@ export type GameEvent =
    * `vanished: true` means the cloud was spent and has left the simulation.
    */
   | { type: 'bounce'; source: 'cloud'; x: number; y: number; id: number; underside: boolean; vanished: boolean }
-  | { type: 'bounce'; source: 'butterfly'; x: number; y: number; id: number; boost: number; chain: number }
+  | {
+      type: 'bounce'
+      source: 'butterfly'
+      x: number
+      y: number
+      id: number
+      boost: number
+      chain: number
+      kind: PickupKind
+    }
+  /** Crossed into a zone for the first time this run. */
+  | { type: 'zone'; index: number; id: string; name: string; blurb: string }
   | { type: 'super'; x: number; y: number; id: number }
   | { type: 'death'; x: number; y: number }
 
@@ -128,6 +161,10 @@ export class SkyJumpCore {
   peakY = 0
   butterfliesCaught = 0
   cupcakesEaten = 0
+  /** Pickups caught this run, split by kind, for the collection. */
+  caught: Record<PickupKind, number> = { butterfly: 0, star: 0, feather: 0 }
+  /** Highest zone index entered this run. Only ever goes up. */
+  deepestZone = 0
   /** Current butterfly chain: each catch adds to the bounce, idling resets it. */
   chain = 0
   /** Counts down after a cupcake; the view draws the rainbow trail while it runs. */
@@ -162,8 +199,32 @@ export class SkyJumpCore {
 
   // -- score -----------------------------------------------------------------
 
+  /**
+   * Altitude on the HUD. Not peakY / pxPerMetre any more: each zone counts a
+   * pixel of climb at its own rate, so the number leaves the thousands behind
+   * somewhere in the atmosphere and never comes back. See ZONES.
+   */
   get metres() {
-    return Math.floor(this.peakY / SCORE.pxPerMetre)
+    return Math.floor(metresAtPx(this.peakY))
+  }
+
+  /** The zone the player is in now. */
+  get zoneIndex() {
+    return zoneIndexAtPx(this.player.y)
+  }
+
+  get zone(): Zone {
+    return ZONES[this.zoneIndex] as Zone
+  }
+
+  /**
+   * The old flat altitude in sky-metres, which is what the difficulty ramp,
+   * the gap growth and the small-cloud bias are tuned against. Those were
+   * measured when a metre meant one thing; feeding them an altitude that
+   * reaches a trillion would peg every one of them on the first zone border.
+   */
+  private get ramp() {
+    return this.peakY / SCORE.pxPerMetre
   }
 
   get score() {
@@ -186,7 +247,7 @@ export class SkyJumpCore {
 
   /** 0..1 ramp used to scale difficulty with height. */
   private get difficulty() {
-    return Math.min(1, Math.max(0, (this.metres - CLOUD.driftStartMetre) / CLOUD.driftRampMetres))
+    return Math.min(1, Math.max(0, (this.ramp - CLOUD.driftStartMetre) / CLOUD.driftRampMetres))
   }
 
   // -- lifecycle -------------------------------------------------------------
@@ -202,6 +263,8 @@ export class SkyJumpCore {
     this.peakY = 0
     this.butterfliesCaught = 0
     this.cupcakesEaten = 0
+    this.caught = { butterfly: 0, star: 0, feather: 0 }
+    this.deepestZone = 0
     this.chain = 0
     this.superTimer = 0
     this.floatTimer = 0
@@ -218,6 +281,8 @@ export class SkyJumpCore {
         id: this.nextId++,
         x: VIEW.width / 2 + dx,
         y: 0,
+        kind: 'cloud',
+        tow: 0,
         size: padSize,
         halfWidth: padHalf,
         driftVx: 0,
@@ -261,6 +326,16 @@ export class SkyJumpCore {
     this.checkDeath()
 
     if (this.player.y > this.peakY) this.peakY = this.player.y
+    this.checkZone()
+  }
+
+  /** Announces a zone the first time this run reaches it. */
+  private checkZone() {
+    const i = zoneIndexAtPx(this.peakY)
+    if (i <= this.deepestZone) return
+    this.deepestZone = i
+    const zone = ZONES[i] as Zone
+    this.events.push({ type: 'zone', index: i, id: zone.id, name: zone.name, blurb: zone.blurb })
   }
 
   private steer(dt: number, input: number) {
@@ -314,12 +389,26 @@ export class SkyJumpCore {
    */
   private gravityNow() {
     const p = this.player
-    if (p.vy > 0) return MOVEMENT.gravity
+    // Each zone has its own pull. It changes how a jump feels, not how fast
+    // you climb: apex is v^2/2g and the period 2v/g, so the rate stays v/4.
+    const g = MOVEMENT.gravity * this.zone.gravity
+    if (p.vy > 0) return g
     const f = this.floatFraction
-    if (f === 0) return MOVEMENT.gravity
+    if (f === 0) return g
     // Strongest at the apex, gone by the time you are falling at apexWindow.
     const taper = 1 - Math.min(1, -p.vy / FLOAT.apexWindow)
-    return MOVEMENT.gravity * (1 - (1 - FLOAT.apexGravity) * f * taper)
+    return g * (1 - (1 - FLOAT.apexGravity) * f * taper)
+  }
+
+  /**
+   * A saucer throws you sideways. It adds to your own motion rather than
+   * replacing it, and only up to a bit over normal steering speed: setting vx
+   * outright took the run out of your hands, and space killed five bot runs in
+   * six against two in every other zone.
+   */
+  private applyTow(tow: number) {
+    const max = MOVEMENT.maxSteerSpeed * 1.3
+    this.player.vx = Math.max(-max, Math.min(max, this.player.vx + tow))
   }
 
   /** Banks hang time for a link in a chain. */
@@ -397,6 +486,7 @@ export class SkyJumpCore {
       cloud.bounced = true
       p.y = cloud.y + PLAYER.feetOffset
       p.vy = MOVEMENT.bounceVelocity
+      if (cloud.tow !== 0) this.applyTow(cloud.tow)
       this.spend(cloud, cloud.y, false)
       return
     }
@@ -418,6 +508,7 @@ export class SkyJumpCore {
       if (Math.abs(p.x - cloud.x) > cloud.halfWidth + PLAYER.halfWidth * 0.5) continue
       cloud.bounced = true
       p.vy = Math.max(p.vy, MOVEMENT.bounceVelocity)
+      if (cloud.tow !== 0) this.applyTow(cloud.tow)
       this.spend(cloud, underside, true)
       return
     }
@@ -442,12 +533,22 @@ export class SkyJumpCore {
   private catchButterfly(b: Butterfly) {
     b.caught = true
     this.butterfliesCaught += 1
+    this.caught[b.kind] += 1
     this.chain += 1
     this.sinceCatch = 0
     this.bankFloat(0.5)
     const boost = Math.min(BUTTERFLY.maxBoost, this.chain * BUTTERFLY.boostPerCatch)
     this.player.vy = MOVEMENT.bounceVelocity * (1 + boost)
-    this.events.push({ type: 'bounce', source: 'butterfly', x: b.x, y: b.y, id: b.id, boost, chain: this.chain })
+    this.events.push({
+      type: 'bounce',
+      source: 'butterfly',
+      x: b.x,
+      y: b.y,
+      id: b.id,
+      boost,
+      chain: this.chain,
+      kind: b.kind,
+    })
   }
 
   private decayChain(dt: number) {
@@ -484,30 +585,42 @@ export class SkyJumpCore {
     let guard = 0
     while (this.spawnY < ceiling && guard < 200) {
       guard += 1
-      const gapGrowth = Math.min(CLOUD.gapGrowthCap, this.metres * CLOUD.gapGrowthPerMetre)
-      this.spawnY += range(this.rng, CLOUD.minGap, CLOUD.maxGap) + gapGrowth
-      this.spawnRow(this.spawnY, this.difficulty)
+      const gapGrowth = Math.min(CLOUD.gapGrowthCap, this.ramp * CLOUD.gapGrowthPerMetre)
+      // Rows spread out in a floatier zone by exactly as much as the apex
+      // grows, so a lower-gravity zone is different, not easier.
+      const zone = ZONES[zoneIndexAtPx(this.spawnY)] as Zone
+      this.spawnY += (range(this.rng, CLOUD.minGap, CLOUD.maxGap) + gapGrowth) * zone.gapScale
+      this.spawnRow(this.spawnY, this.difficulty, zone)
     }
   }
 
-  private spawnRow(y: number, difficulty: number) {
+  private spawnRow(y: number, difficulty: number, zone: Zone) {
     // Pick one of the three sprite sizes, leaning smaller the higher you are.
-    const smallBias = Math.min(CLOUD.maxSmallBias, this.metres * CLOUD.smallBiasPerMetre)
+    const smallBias = Math.min(CLOUD.maxSmallBias, this.ramp * CLOUD.smallBiasPerMetre)
     const size =
       this.rng() < smallBias ? 0 : Math.min(CLOUD.sizes.length - 1, Math.floor(this.rng() * CLOUD.sizes.length))
     const halfWidth = CLOUD.sizes[size] as number
+    const kind = this.pickPlatform(zone)
 
     let driftVx = 0
-    if (difficulty > 0 && this.rng() < CLOUD.driftChance) {
-      const speed = CLOUD.driftMaxSpeed * difficulty * range(this.rng, 0.4, 1)
+    if (difficulty > 0 && this.rng() < CLOUD.driftChance * zone.driftScale) {
+      // Drift speed goes with gravity, because what matters is how far a
+      // platform slides during one hop, not per second. A hop lasts 2v/g, so
+      // in half gravity it lasts twice as long; leaving the speed alone there
+      // moved every platform 2.8x further out from under you and killed five
+      // bot runs in six in space against two in every other zone.
+      const speed = CLOUD.driftMaxSpeed * zone.driftScale * zone.gravity * difficulty * range(this.rng, 0.4, 1)
       driftVx = this.rng() < 0.5 ? -speed : speed
     }
+    // A saucer throws you the way it is already going, so it reads as a tow
+    // rather than a random shove.
+    const tow = kind === 'saucer' ? Math.sign(driftVx || 1) * zone.tow : 0
 
     // Step sideways from the row below rather than landing anywhere, so the
     // next cloud is always inside one bounce's horizontal reach.
     const x = this.placeInReach(this.lastRowX, CLOUD.maxSideStep, halfWidth)
     this.lastRowX = x
-    this.clouds.push({ id: this.nextId++, x, y, size, halfWidth, driftVx, bounced: false })
+    this.clouds.push({ id: this.nextId++, x, y, size, halfWidth, driftVx, bounced: false, kind, tow })
 
     if (this.rng() < BUTTERFLY.spawnChance) {
       const homeY = y + range(this.rng, BUTTERFLY.minRise, BUTTERFLY.maxRise)
@@ -523,6 +636,7 @@ export class SkyJumpCore {
         bobPhase: this.rng() * Math.PI * 2,
         colour: Math.floor(this.rng() * 5),
         caught: false,
+        kind: zone.pickup,
       })
     }
 
@@ -546,6 +660,18 @@ export class SkyJumpCore {
    * stays something the player may use, never something the level requires.
    * `margin` is the half-width that must stay inside the edges.
    */
+  /** One of the zone's platforms, by weight. */
+  private pickPlatform(zone: Zone): PlatformKind {
+    let total = 0
+    for (const p of zone.platforms) total += p.weight
+    let roll = this.rng() * total
+    for (const p of zone.platforms) {
+      roll -= p.weight
+      if (roll <= 0) return p.kind
+    }
+    return (zone.platforms[0] as { kind: PlatformKind }).kind
+  }
+
   private placeInReach(from: number, reach: number, margin: number) {
     // Intersect "within reach of the row below" with "fully on screen" and
     // pick inside that. Reflecting or clamping instead can quietly push a row
@@ -577,6 +703,8 @@ export class SkyJumpCore {
         id: this.nextId++,
         x: goneLeft ? VIEW.width + cloud.halfWidth : -cloud.halfWidth,
         y: cloud.y,
+        kind: cloud.kind,
+        tow: cloud.tow,
         size: cloud.size,
         halfWidth: cloud.halfWidth,
         driftVx: cloud.driftVx,

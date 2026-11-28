@@ -237,10 +237,172 @@ export const CUPCAKE = {
   score: 25,
 }
 
+/**
+ * Zones.
+ *
+ * The climb does not stay in the sky. Keep going and the air thins, then runs
+ * out, and then you are somewhere a unicorn goes when it has climbed far
+ * enough. Each zone is a different game: its own gravity, its own things to
+ * bounce off, its own thing to collect.
+ *
+ * **Why the numbers get silly.** Climb rate in pixels per second barely moves
+ * between zones — for a bounce, apex is v^2/2g and the period is 2v/g, so the
+ * rate is v/4 whatever gravity does. What changes is how much altitude a pixel
+ * is *worth*. In the sky you are counting metres over a field. In space you are
+ * crossing the distance between rocks. So `metresPerPx` climbs by a factor of
+ * sixty, then four hundred, then a thousand, and the altitude on the HUD goes
+ * from thousands to billions to numbers nobody has a word for — while the game
+ * in front of you stays playable, and every zone takes about half an hour.
+ *
+ * The thresholds are set from measurement, not taste. 24 bot runs of up to an
+ * hour each: half reach 10,000 m, a fifth reach 30,000 m, and one in twelve
+ * reaches 50,000 m at around the 32-minute mark. 50,000 is therefore where the
+ * air starts to thin — the best run anyone has had so far is the *start* of the
+ * story, not the end of it.
+ *
+ * The rest is deliberately enormous. Space is about three hours past that, and
+ * Heaven about nine hours past space: twelve and a half hours of unbroken
+ * climbing, on one run, without dying. That is the brief — Heaven is meant to
+ * be a rumour. Nobody has seen it, and it is entirely possible nobody will.
+ * If it should ever become reachable, the only numbers to change are the
+ * `fromMetre` and `metresPerPx` pairs below; nothing else depends on them.
+ */
+export type ZoneId = 'sky' | 'atmosphere' | 'space' | 'heaven'
+export type PlatformKind = 'cloud' | 'wisp' | 'asteroid' | 'planet' | 'saucer' | 'halo'
+export type PickupKind = 'butterfly' | 'star' | 'feather'
+
+export type Zone = {
+  id: ZoneId
+  /** Shown when you first cross into it. */
+  name: string
+  blurb: string
+  /** Altitude, in metres, at which this zone begins. */
+  fromMetre: number
+  /** Metres of altitude one pixel of climb is worth here. */
+  metresPerPx: number
+  /** Multiplier on MOVEMENT.gravity. Lower is floatier, not faster. */
+  gravity: number
+  /**
+   * Multiplier on the gap between rows. It tracks 1/gravity, because apex
+   * scales the same way: a floatier zone that kept the old gaps would simply
+   * be easier, and the point is that it is different, not gentler.
+   */
+  gapScale: number
+  /** The sprites you bounce off here, and how often each comes up. */
+  platforms: { kind: PlatformKind; weight: number }[]
+  /** What floats above the rows, and what it is called in the collection. */
+  pickup: PickupKind
+  /** Multiplier on how often a platform drifts, and how fast. */
+  driftScale: number
+  /** Sideways shove when you bounce off a saucer, in px/s. 0 for everything else. */
+  tow: number
+}
+
+export const ZONES: Zone[] = [
+  {
+    id: 'sky',
+    name: 'The Sky',
+    blurb: 'Clouds and butterflies.',
+    fromMetre: 0,
+    metresPerPx: 1 / 24,
+    gravity: 1,
+    gapScale: 1,
+    platforms: [{ kind: 'cloud', weight: 1 }],
+    pickup: 'butterfly',
+    driftScale: 1,
+    tow: 0,
+  },
+  {
+    id: 'atmosphere',
+    name: 'The Atmosphere',
+    blurb: 'The air is thinning. The wind up here has opinions.',
+    fromMetre: 50_000,
+    metresPerPx: 1.5,
+    gravity: 0.86,
+    gapScale: 1 / 0.86,
+    // Cloud cover breaks up into cirrus the higher you get.
+    platforms: [
+      { kind: 'cloud', weight: 1 },
+      { kind: 'wisp', weight: 2 },
+    ],
+    pickup: 'butterfly',
+    // The jet stream: everything up here is moving sideways.
+    driftScale: 1.8,
+    tow: 0,
+  },
+  {
+    id: 'space',
+    name: 'Space',
+    blurb: 'No air at all. Mind the saucers.',
+    fromMetre: 10_000_000,
+    // Tuned against the measured 787 px/s in space so the leg to Heaven runs
+    // just under nine hours; see docs/skyjump-timing.md, Zones.
+    metresPerPx: 40_000,
+    gravity: 0.5,
+    gapScale: 2,
+    platforms: [
+      { kind: 'asteroid', weight: 5 },
+      { kind: 'saucer', weight: 2 },
+      { kind: 'planet', weight: 1 },
+    ],
+    pickup: 'star',
+    driftScale: 1.4,
+    // A saucer does not just bounce you, it throws you sideways — added to
+    // your own motion, not instead of it. See applyTow in core.ts.
+    tow: 300,
+  },
+  {
+    id: 'heaven',
+    name: 'Unicorn Heaven',
+    blurb: 'You climbed far enough. Nobody has seen this.',
+    fromMetre: 1_000_000_000_000,
+    metresPerPx: 1_000_000_000,
+    gravity: 0.34,
+    gapScale: 1 / 0.34,
+    platforms: [{ kind: 'halo', weight: 1 }],
+    pickup: 'feather',
+    driftScale: 0.6,
+    tow: 0,
+  },
+]
+
+/**
+ * Pixel altitude at which each zone begins, worked out once from the metre
+ * thresholds above. The boundaries are given in metres because that is how
+ * anyone thinks about them; the simulation only ever deals in pixels.
+ */
+export const ZONE_FROM_PX: number[] = (() => {
+  const out = [0]
+  for (let i = 1; i < ZONES.length; i += 1) {
+    const prev = ZONES[i - 1] as Zone
+    const here = ZONES[i] as Zone
+    out.push((out[i - 1] as number) + (here.fromMetre - prev.fromMetre) / prev.metresPerPx)
+  }
+  return out
+})()
+
+/** The zone a pixel altitude falls in. */
+export const zoneIndexAtPx = (px: number) => {
+  for (let i = ZONES.length - 1; i > 0; i -= 1) if (px >= (ZONE_FROM_PX[i] as number)) return i
+  return 0
+}
+
+/** Altitude in metres for a pixel altitude, counting each zone at its own rate. */
+export const metresAtPx = (px: number) => {
+  if (px <= 0) return 0
+  const i = zoneIndexAtPx(px)
+  const zone = ZONES[i] as Zone
+  return zone.fromMetre + (px - (ZONE_FROM_PX[i] as number)) * zone.metresPerPx
+}
+
 export const SCORE = {
-  /** World px per point of altitude shown in the HUD. */
+  /**
+   * World px per metre in the sky. Kept because the spawner's difficulty ramp
+   * is written in these units; altitude itself now comes from metresAtPx,
+   * which counts each zone at its own rate.
+   */
   pxPerMetre: 24,
-  /** Points for each butterfly caught, on top of altitude. */
+  /** Points for each pickup caught, on top of altitude. */
   perButterfly: 5,
 }
 

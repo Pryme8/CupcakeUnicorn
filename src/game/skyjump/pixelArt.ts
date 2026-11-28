@@ -162,7 +162,16 @@ const CLOUD_PUFFS: [number, number, number][][] = [
 ]
 
 export const CLOUD_HALF_WIDTHS = CLOUD_WIDTHS.map((w) => (w * PIXEL) / 2)
-export const cloudKey = (size: number) => `skyjump-px-cloud-${size}`
+
+/**
+ * Every platform in every zone is drawn on the same grid as a cloud: the same
+ * 26 rows, the same landing ledge on row 9, the same three widths. A saucer
+ * and a cloud are the same shape to the simulation and to the camera, and only
+ * the picture changes — so collision, the sprite origin and the squash on a
+ * bounce are written once and cannot drift apart from the art.
+ */
+export const platformKey = (kind: string, size: number) => `skyjump-px-plat-${kind}-${size}`
+export const cloudKey = (size: number) => platformKey('cloud', size)
 
 const LIT = 1
 const SHADE = 2
@@ -179,6 +188,125 @@ const createClouds = (scene: Phaser.Scene) => {
     shadeRows(m, 21, LIT, SHADE)
     paint(scene, cloudKey(index), m, CLOUD_COLOURS, CLOUD_OUTLINE)
   })
+}
+
+// ---------------------------------------------------------------------------
+// The other zones' platforms
+// ---------------------------------------------------------------------------
+
+/*
+ * Cirrus, rock, saucer, planet, halo. Each fills the same 26-row mask with its
+ * landing surface on row 9, so rows 0-8 are the part that stands above where
+ * you land — a cloud's crown, a saucer's dome, a halo's ring.
+ */
+
+const A = 1
+const B = 2
+const C = 3
+const D = 4
+
+type Platform = {
+  colours: Record<number, string>
+  outline: string
+  draw: (m: Mask, w: number) => void
+}
+
+const PLATFORMS: Record<string, Platform> = {
+  // Thin high cirrus: the cloud cover breaking up as the air gives out.
+  wisp: {
+    colours: { [A]: '#ffffff', [B]: '#d4e4fa' },
+    outline: '#9db4d8',
+    draw: (m, w) => {
+      ellipse(m, w * 0.5, 12, w * 0.5, 3.4, A)
+      ellipse(m, w * 0.28, 10.4, w * 0.24, 1.9, A)
+      ellipse(m, w * 0.66, 10.2, w * 0.2, 1.7, A)
+      ellipse(m, w * 0.84, 12.5, w * 0.14, 1.3, A)
+      shadeRows(m, 13, A, B)
+    },
+  },
+
+  // Tumbling rock. The craters are painted over the body only, so they never
+  // punch a hole in the silhouette.
+  asteroid: {
+    colours: { [A]: '#9a9088', [B]: '#6d655f', [C]: '#7f766f' },
+    outline: '#4a443f',
+    draw: (m, w) => {
+      ellipse(m, w / 2, 16, w / 2 - 1, 7.4, A)
+      ellipse(m, w * 0.27, 11.2, w * 0.17, 3.4, A)
+      ellipse(m, w * 0.63, 10.6, w * 0.21, 3.9, A)
+      ellipse(m, w * 0.4, 14, 2.6, 1.7, C, A)
+      ellipse(m, w * 0.68, 17.5, 3.1, 2.1, C, A)
+      ellipse(m, w * 0.2, 17, 2.2, 1.5, C, A)
+      shadeRows(m, 19, A, B)
+    },
+  },
+
+  // A disc with a dome above the deck and lamps under it. The dome sits in
+  // rows 3-9, which is the space a cloud spends on its crown.
+  saucer: {
+    colours: { [A]: '#b9c6d8', [B]: '#7c8ba3', [C]: '#8ef0ff', [D]: '#ffe066' },
+    outline: '#3f4a5e',
+    draw: (m, w) => {
+      ellipse(m, w / 2, 9.5, w * 0.2, 5.2, C)
+      ellipse(m, w / 2, 8.4, w * 0.13, 3.1, A, C)
+      ellipse(m, w / 2, 12, w / 2 - 1, 3.2, A)
+      shadeRows(m, 13, A, B)
+      for (let i = 0; i < 3; i += 1) ellipse(m, w * (0.3 + 0.2 * i), 15, 1.5, 1.5, D)
+    },
+  },
+
+  /*
+   * A banded gas giant, seen nearly edge-on. It has to be an oblate ellipse
+   * rather than a circle: the mask is 26 rows and up to 75 wide, and a sphere
+   * drawn to those rows would be a third the width of the box you actually
+   * land on — a planet you fall straight past on either side.
+   */
+  planet: {
+    colours: { [A]: '#d98f6a', [B]: '#b56a4c', [C]: '#f0c9a0', [D]: '#e8d7b8' },
+    outline: '#6b3b2a',
+    draw: (m, w) => {
+      const rx = w / 2 - 1
+      const ry = 7.4
+      const cy = 9 + ry
+      // The ring passes behind, so it is drawn first and the body covers it.
+      ellipse(m, w / 2, cy - 1, rx, 2.2, D)
+      ellipse(m, w / 2, cy, rx, ry, A)
+      ellipse(m, w / 2, cy - ry * 0.45, rx * 0.86, ry * 0.2, C, A)
+      ellipse(m, w / 2, cy + ry * 0.3, rx * 0.8, ry * 0.16, C, A)
+      shadeRows(m, Math.round(cy + ry * 0.5), A, B)
+      // ...and in front of it on the near side, below the body's midline.
+      ellipse(m, w / 2, cy + 2.4, rx, 1.6, D)
+    },
+  },
+
+  // Unicorn heaven: a lit cloud with a halo standing over it.
+  halo: {
+    colours: { [A]: '#fff3c4', [B]: '#edcf84', [C]: '#ffcc33' },
+    outline: '#c9a94a',
+    draw: (m, w) => {
+      ellipse(m, w / 2, 16, w / 2 - 1, 7.2, A)
+      ellipse(m, w * 0.3, 11, w * 0.18, 4, A)
+      ellipse(m, w * 0.66, 10.6, w * 0.2, 4.2, A)
+      shadeRows(m, 20, A, B)
+      // The halo floats clear of the body, so hollowing it cannot eat the
+      // ledge: it lives in the rows above where you land. Kept narrow and
+      // deep, because a wide flat ring at this size just reads as a gold bar.
+      ellipse(m, w / 2, 4.5, 9, 3.4, C)
+      ellipse(m, w / 2, 4.5, 6, 1.7, 0)
+    },
+  },
+}
+
+export const PLATFORM_KINDS = Object.keys(PLATFORMS)
+
+const createPlatforms = (scene: Phaser.Scene) => {
+  for (const [kind, spec] of Object.entries(PLATFORMS)) {
+    CLOUD_WIDTHS.forEach((w, index) => {
+      const m = mask(w, CLOUD_BODY_ROWS)
+      spec.draw(m, w)
+      paint(scene, platformKey(kind, index), m, spec.colours, spec.outline)
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -342,6 +470,141 @@ const createQuantizedActors = (scene: Phaser.Scene, unicornFrames: string[], cup
 }
 
 // ---------------------------------------------------------------------------
+// The other zones' pickups
+// ---------------------------------------------------------------------------
+
+/*
+ * A star in space and a feather in heaven take the butterfly's place: same
+ * three frames, same per-colour animation, so the renderer treats all three
+ * the same way and only the key changes.
+ */
+
+const STAR_ROWS = [
+  '......X......',
+  '.....XXX.....',
+  '.....XXX.....',
+  '....XXXXX....',
+  'XXXXXXXXXXXXX',
+  '.XXXXXXXXXXX.',
+  '..XXXXXXXXX..',
+  '...XXXXXXX...',
+  '...XXXXXXX...',
+  '..XXX...XXX..',
+  '..XX.....XX..',
+  '.XX.......XX.',
+  '.X.........X.',
+]
+
+const FEATHER_ROWS = [
+  '....XX.....',
+  '...XXXX....',
+  '..XXXXXX...',
+  '..XXXXXXX..',
+  '.XXXXXXXX..',
+  '.XXXXXXXX..',
+  '.XXXXXXX...',
+  '.XXXXXX....',
+  '..XXXXX....',
+  '..XXXX.....',
+  '...XXX.....',
+  '...XX......',
+  '....Q......',
+  '....Q......',
+  '....Q......',
+  '....Q......',
+  '....Q......',
+]
+
+const STAR_PALETTES: Record<number, string>[] = [
+  { [UPPER]: '#ffe066', [GLINT]: '#fffbe0', [LOWER]: '#e0a92b' },
+  { [UPPER]: '#a8d8ff', [GLINT]: '#eaf6ff', [LOWER]: '#5f9ad6' },
+  { [UPPER]: '#ffb3e6', [GLINT]: '#ffe6f7', [LOWER]: '#d966ab' },
+]
+const STAR_OUTLINES = ['#8a6212', '#2f5d8c', '#8c3f70']
+
+const FEATHER_PALETTES: Record<number, string>[] = [
+  { [UPPER]: '#fff6da', [GLINT]: '#ffffff', [LOWER]: '#e3cf9a', [BODY]: '#c9a94a' },
+  { [UPPER]: '#ffd9ec', [GLINT]: '#fff2f8', [LOWER]: '#e0a6c6', [BODY]: '#b9739a' },
+  { [UPPER]: '#dff0ff', [GLINT]: '#ffffff', [LOWER]: '#a8c8e6', [BODY]: '#6f93b5' },
+]
+const FEATHER_OUTLINES = ['#a08536', '#8d5478', '#587892']
+
+/** A twinkle rather than a flap: the glint moves, the shape holds. */
+const starMask = (frame: number) => {
+  const m = fromRows(STAR_ROWS, { X: UPPER })
+  shadeRows(m, 8, UPPER, LOWER)
+  const glints: [number, number][][] = [
+    [[5, 5], [6, 5], [5, 6]],
+    [[6, 4], [6, 5]],
+    [[5, 5], [6, 6], [7, 5]],
+  ]
+  for (const [x, y] of glints[frame % glints.length] ?? []) poke(m, x, y, GLINT)
+  return m
+}
+
+/** Three leans, so a feather turns over as it falls. */
+const featherMask = (frame: number) => {
+  const base = fromRows(FEATHER_ROWS, { X: UPPER, Q: BODY })
+  const lean = [0, 1, 2][frame % 3] as number
+  const m = mask(base.w + 2, base.h)
+  for (let y = 0; y < base.h; y += 1) {
+    const shift = Math.round((y / (base.h - 1)) * lean)
+    for (let x = 0; x < base.w; x += 1) {
+      const cell = base.cells[y * base.w + x] ?? 0
+      if (cell) poke(m, x + shift, y, cell)
+    }
+  }
+  shadeRows(m, 7, UPPER, LOWER)
+  poke(m, 4, 1, GLINT)
+  poke(m, 4, 2, GLINT)
+  poke(m, 3, 3, GLINT)
+  return m
+}
+
+type PickupSpec = {
+  palettes: Record<number, string>[]
+  outlines: string[]
+  build: (frame: number) => Mask
+}
+
+const PICKUPS: Record<string, PickupSpec> = {
+  star: { palettes: STAR_PALETTES, outlines: STAR_OUTLINES, build: starMask },
+  feather: { palettes: FEATHER_PALETTES, outlines: FEATHER_OUTLINES, build: featherMask },
+}
+
+/** How many palettes each kind has, so the spawner can pick one. */
+export const PICKUP_COLOURS: Record<string, number> = {
+  butterfly: BUTTERFLY_PALETTES.length,
+  star: STAR_PALETTES.length,
+  feather: FEATHER_PALETTES.length,
+}
+
+export const pickupKey = (kind: string, colour: number, frame: number) =>
+  kind === 'butterfly' ? butterflyKey(colour, frame) : `skyjump-px-${kind}-${colour}-${frame}`
+
+export const pickupAnimKey = (kind: string, colour: number) =>
+  kind === 'butterfly' ? butterflyAnimKey(colour) : `skyjump-px-${kind}-anim-${colour}`
+
+const createOtherPickups = (scene: Phaser.Scene) => {
+  for (const [kind, spec] of Object.entries(PICKUPS)) {
+    spec.palettes.forEach((palette, colour) => {
+      for (let frame = 0; frame < 3; frame += 1) {
+        paint(scene, pickupKey(kind, colour, frame), spec.build(frame), palette, spec.outlines[colour])
+      }
+      const key = pickupAnimKey(kind, colour)
+      if (scene.anims.exists(key)) return
+      if (!scene.textures.exists(pickupKey(kind, colour, 0))) return
+      scene.anims.create({
+        key,
+        frames: [0, 1, 2, 1].map((frame) => ({ key: pickupKey(kind, colour, frame) })),
+        frameRate: 6,
+        repeat: -1,
+      })
+    })
+  }
+}
+
+// ---------------------------------------------------------------------------
 // HUD and effects
 // ---------------------------------------------------------------------------
 
@@ -386,7 +649,9 @@ const createHaze = (scene: Phaser.Scene) => {
 
 export const createPixelArt = (scene: Phaser.Scene, unicornFrames: string[], cupcakeKey: string) => {
   createClouds(scene)
+  createPlatforms(scene)
   createButterflies(scene)
+  createOtherPickups(scene)
   createHudIcon(scene)
   createSparkle(scene)
   createHaze(scene)

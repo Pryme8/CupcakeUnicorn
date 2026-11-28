@@ -3,23 +3,58 @@ import { ASSET_KEYS, UNICORN_FRAMES, getFrameKey, loadAssets } from '../assets'
 import { createPegasusTextures } from '../pegasusTextures'
 import { Wings } from '../wings'
 import { FONT } from '../levelKit'
-import { MOVEMENT, STORAGE_KEY, VIEW } from './config'
+import { MOVEMENT, STORAGE_KEY, VIEW, ZONES } from './config'
 import { SkyJumpCore, type GameEvent } from './core'
 import {
-  BUTTERFLY_COLOURS,
   CLOUD_BODY_ROWS,
   CLOUD_TOP_ROW,
   PIXEL,
   PIXEL_TEXTURES,
   HUD_BUTTERFLY,
   PX_CUPCAKE,
+  PICKUP_COLOURS,
   UNICORN_ART,
-  butterflyAnimKey,
-  butterflyKey,
-  cloudKey,
   createPixelArt,
+  pickupAnimKey,
+  pickupKey,
+  platformKey,
   pxUnicornFrame,
 } from './pixelArt'
+
+/**
+ * The sky behind each zone: top colour, bottom colour, and the tint of the
+ * hazy wallpaper layer. Zone rules live in config.ts; this is only how they
+ * look, which is the view's business.
+ */
+const ZONE_SKY: Record<string, { top: number; bottom: number; haze: number; hazeAlpha: number }> = {
+  sky: { top: 0x8e9bc4, bottom: 0xc9d8ef, haze: 0xffffff, hazeAlpha: 0.7 },
+  atmosphere: { top: 0x3f4f87, bottom: 0x93a8d8, haze: 0xdfe8ff, hazeAlpha: 0.45 },
+  space: { top: 0x05030f, bottom: 0x1b1340, haze: 0x6a5cff, hazeAlpha: 0.22 },
+  heaven: { top: 0xf6d98a, bottom: 0xfff6e2, haze: 0xffffff, hazeAlpha: 0.8 },
+}
+
+/** Lifetime pickups, kept across runs. The collection the climb is really for. */
+const COLLECTION_KEY = 'pegasus-jump.collection'
+
+/**
+ * Altitude stops being a number you can read somewhere in the atmosphere and
+ * ends up in the trillions, so past a million it gets a suffix. Below that it
+ * stays exact, because that is the range anyone is actually competing in.
+ */
+const formatMetres = (m: number) => {
+  if (m < 1_000_000) return m.toLocaleString('en-US')
+  const units: [number, string][] = [
+    [1e18, 'Qi'],
+    [1e15, 'Qa'],
+    [1e12, 'T'],
+    [1e9, 'B'],
+    [1e6, 'M'],
+  ]
+  for (const [size, suffix] of units) {
+    if (m >= size) return `${(m / size).toFixed(2)} ${suffix}`
+  }
+  return `${m}`
+}
 
 /** Tints for the sparkle bursts, roughly matching the butterfly palettes. */
 const BURST_TINTS = [0xff8fb8, 0xffd977, 0x9af0bd, 0x92cfff, 0xd6aaff]
@@ -81,6 +116,10 @@ export default class SkyJumpScene extends Phaser.Scene {
   private butterflySprites = new Map<number, Phaser.GameObjects.Sprite>()
   private cupcakeSprites = new Map<number, Phaser.GameObjects.Image>()
   private hazes: Phaser.GameObjects.Image[] = []
+  private sky!: Phaser.GameObjects.Graphics
+  /** Zone the sky is currently painted for, so it is only repainted on a change. */
+  private skyZone = -1
+  private zoneBanner?: Phaser.GameObjects.Container
   /** Seconds since the last rainbow puff, while a Super Jump is running. */
   private trailClock = 0
 
@@ -133,6 +172,7 @@ export default class SkyJumpScene extends Phaser.Scene {
     if (new URLSearchParams(window.location.search).get('vanish') === '1') this.core.vanishOnBounce = true
 
     this.paintBackdrop()
+    this.skyZone = 0
     this.rig = this.createRig(1)
     this.ghost = this.createRig(0.999)
     this.setRigVisible(this.ghost, false)
@@ -158,17 +198,8 @@ export default class SkyJumpScene extends Phaser.Scene {
   private paintBackdrop() {
     // A fixed sky, like the original: the hazy layer is wallpaper, the puffy
     // platform clouds are the only thing that really scrolls.
-    const g = this.add.graphics().setDepth(DEPTH.sky)
-    const top = Phaser.Display.Color.ValueToColor(0x8e9bc4)
-    const bottom = Phaser.Display.Color.ValueToColor(0xc9d8ef)
-    const strips = 32
-    const stripHeight = Math.ceil(VIEW.height / strips)
-    for (let i = 0; i < strips; i += 1) {
-      const c = Phaser.Display.Color.Interpolate.ColorWithColor(top, bottom, strips - 1, i)
-      g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1)
-      g.fillRect(0, i * stripHeight, VIEW.width, stripHeight + 1)
-    }
-
+    this.sky = this.add.graphics().setDepth(DEPTH.sky)
+    this.paintSky('sky')
     const count = Math.ceil(VIEW.height / HAZE_SPACING) + 2
     for (let i = 0; i < count; i += 1) {
       const haze = this.add
@@ -178,6 +209,76 @@ export default class SkyJumpScene extends Phaser.Scene {
         .setAlpha(Phaser.Math.FloatBetween(0.5, 0.9))
       this.hazes.push(haze)
     }
+  }
+
+  /** Repaints the gradient for a zone. Called once at start and on each border. */
+  private paintSky(zoneId: string) {
+    const look = ZONE_SKY[zoneId] ?? (ZONE_SKY.sky as (typeof ZONE_SKY)[string])
+    const top = Phaser.Display.Color.ValueToColor(look.top)
+    const bottom = Phaser.Display.Color.ValueToColor(look.bottom)
+    const strips = 32
+    const stripHeight = Math.ceil(VIEW.height / strips)
+    this.sky.clear()
+    for (let i = 0; i < strips; i += 1) {
+      const c = Phaser.Display.Color.Interpolate.ColorWithColor(top, bottom, strips - 1, i)
+      this.sky.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1)
+      this.sky.fillRect(0, i * stripHeight, VIEW.width, stripHeight + 1)
+    }
+    for (const haze of this.hazes) {
+      haze.setTint(look.haze)
+      haze.setAlpha(look.hazeAlpha)
+    }
+  }
+
+  /**
+   * Follows the zone the player is in, not the deepest reached: a fall back
+   * across a border takes the sky with it, and the sky is never left painted
+   * for somewhere you are not.
+   */
+  private syncSky() {
+    const index = this.core.zoneIndex
+    if (index === this.skyZone) return
+    this.skyZone = index
+    const zone = ZONES[index]
+    if (zone) this.paintSky(zone.id)
+  }
+
+  /**
+   * Crossing a border for the first time. The sky has already changed under
+   * it, so the moment reads as arriving somewhere rather than being told.
+   */
+  private announceZone(name: string, blurb: string) {
+    this.cameras.main.flash(500, 255, 255, 255)
+    // One at a time. Nothing should ever stack two of these.
+    this.zoneBanner?.destroy()
+
+    const panel = this.add.container(0, 0).setDepth(DEPTH.overlay)
+    const line = (text: string, dy: number, size: number, color: string) =>
+      this.add
+        .text(VIEW.width / 2, VIEW.height * 0.4 + dy, text, {
+          fontFamily: FONT,
+          fontSize: `${size}px`,
+          color,
+          align: 'center',
+          stroke: '#2a2140',
+          strokeThickness: 7,
+        })
+        .setOrigin(0.5)
+    panel.add(line(name, 0, 56, '#ffffff'))
+    panel.add(line(blurb, 54, 24, '#ffe9a8'))
+    this.zoneBanner = panel
+    panel.setAlpha(0)
+    this.tweens.add({ targets: panel, alpha: 1, duration: 320 })
+    this.tweens.add({
+      targets: panel,
+      alpha: 0,
+      delay: 2600,
+      duration: 700,
+      onComplete: () => {
+        if (this.zoneBanner === panel) this.zoneBanner = undefined
+        panel.destroy()
+      },
+    })
   }
 
   private createRig(alpha: number): PlayerRig {
@@ -282,6 +383,7 @@ export default class SkyJumpScene extends Phaser.Scene {
     this.syncCupcakes()
     this.syncPlayer(dt)
     this.syncTrail(dt)
+    this.syncSky()
     this.syncHaze()
     this.syncHud()
   }
@@ -314,6 +416,10 @@ export default class SkyJumpScene extends Phaser.Scene {
     for (const event of events) {
       if (event.type === 'death') {
         this.showGameOver()
+        continue
+      }
+      if (event.type === 'zone') {
+        this.announceZone(event.name, event.blurb)
         continue
       }
       const screenY = this.core.toScreenY(event.y)
@@ -455,7 +561,7 @@ export default class SkyJumpScene extends Phaser.Scene {
       seen.add(cloud.id)
       let sprite = this.cloudSprites.get(cloud.id)
       if (!sprite) {
-        sprite = this.add.image(0, 0, cloudKey(cloud.size)).setDepth(DEPTH.cloud)
+        sprite = this.add.image(0, 0, platformKey(cloud.kind, cloud.size)).setDepth(DEPTH.cloud)
         // Pixel art is never stretched: one art px is always PIXEL world px,
         // and the sprite hangs from the ledge row the Pegasus lands on. The
         // +1 accounts for the outline skirt the texture adds on every side.
@@ -491,11 +597,11 @@ export default class SkyJumpScene extends Phaser.Scene {
       if (!sprite) {
         // Each colour is its own baked palette rather than a tint, so the
         // dark body and the wing shading stay right whatever the colour is.
-        const colour = b.colour % BUTTERFLY_COLOURS
-        sprite = this.add.sprite(0, 0, butterflyKey(colour, 0)).setDepth(DEPTH.butterfly)
+        const colour = b.colour % (PICKUP_COLOURS[b.kind] ?? 1)
+        sprite = this.add.sprite(0, 0, pickupKey(b.kind, colour, 0)).setDepth(DEPTH.butterfly)
         sprite.setScale(PIXEL)
-        if (this.anims.exists(butterflyAnimKey(colour))) {
-          sprite.play(butterflyAnimKey(colour))
+        if (this.anims.exists(pickupAnimKey(b.kind, colour))) {
+          sprite.play(pickupAnimKey(b.kind, colour))
           sprite.anims.setProgress(Math.random())
         }
         this.butterflySprites.set(b.id, sprite)
@@ -580,7 +686,7 @@ export default class SkyJumpScene extends Phaser.Scene {
   }
 
   private syncHud() {
-    this.heightText.setText(`${this.core.metres}`)
+    this.heightText.setText(formatMetres(this.core.metres))
     this.butterflyText.setText(`${this.core.butterfliesCaught}`)
     this.modeText.setText(this.core.vanishOnBounce ? 'one-use clouds  [V]' : '')
   }
@@ -595,6 +701,39 @@ export default class SkyJumpScene extends Phaser.Scene {
   }
 
   // -- game over -------------------------------------------------------------
+
+  /** Lifetime pickups, read from storage; a fresh browser starts at zero. */
+  private readCollection(): Record<string, number> {
+    try {
+      const raw = window.localStorage.getItem(COLLECTION_KEY)
+      const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+      const out: Record<string, number> = {}
+      // Whatever is in storage was put there by an older build or by hand, so
+      // take only the numbers and ignore the rest.
+      for (const key of ['butterfly', 'star', 'feather']) {
+        const value = parsed[key]
+        out[key] = typeof value === 'number' && Number.isFinite(value) ? value : 0
+      }
+      return out
+    } catch {
+      return { butterfly: 0, star: 0, feather: 0 }
+    }
+  }
+
+  /** Adds this run to the lifetime totals and returns them. */
+  private bankCollection(): Record<string, number> {
+    const total = this.readCollection()
+    for (const key of ['butterfly', 'star', 'feather'] as const) {
+      total[key] = (total[key] ?? 0) + (this.core.caught[key] ?? 0)
+    }
+    try {
+      window.localStorage.setItem(COLLECTION_KEY, JSON.stringify(total))
+    } catch {
+      // A browser with storage switched off still gets to play; it just does
+      // not get to keep anything.
+    }
+    return total
+  }
 
   private showGameOver() {
     const score = this.core.score
@@ -618,11 +757,25 @@ export default class SkyJumpScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
 
-    panel.add(big('Down you go!', VIEW.height * 0.33, 54, '#ffd9ec'))
-    panel.add(big(`${this.core.metres} m   •   ${this.core.butterfliesCaught} butterflies`, VIEW.height * 0.42, 32))
-    panel.add(big(`score ${this.core.score}`, VIEW.height * 0.49, 42, '#ffe9a8'))
-    panel.add(big(`best ${this.best}`, VIEW.height * 0.55, 28, '#cfe3ff'))
-    const again = big('Space / tap to fly again', VIEW.height * 0.66, 30, '#ffffff')
+    const total = this.bankCollection()
+    const zone = ZONES[this.core.deepestZone]
+
+    panel.add(big('Down you go!', VIEW.height * 0.3, 54, '#ffd9ec'))
+    panel.add(big(`${formatMetres(this.core.metres)} m`, VIEW.height * 0.38, 34))
+    if (zone && this.core.deepestZone > 0) {
+      panel.add(big(`you reached ${zone.name}`, VIEW.height * 0.435, 24, '#ffe9a8'))
+    }
+    panel.add(big(`score ${this.core.score}`, VIEW.height * 0.5, 40, '#ffe9a8'))
+    panel.add(big(`best ${this.best}`, VIEW.height * 0.555, 26, '#cfe3ff'))
+
+    // The run is over; the collection is not. Everything caught, ever.
+    const parts = [`${total.butterfly ?? 0} butterflies`]
+    if ((total.star ?? 0) > 0) parts.push(`${total.star} stars`)
+    if ((total.feather ?? 0) > 0) parts.push(`${total.feather} feathers`)
+    panel.add(big('collected, all time', VIEW.height * 0.62, 20, '#b9c6d8'))
+    panel.add(big(parts.join('   •   '), VIEW.height * 0.665, 24, '#ffffff'))
+
+    const again = big('Space / tap to fly again', VIEW.height * 0.76, 30, '#ffffff')
     panel.add(again)
     this.tweens.add({ targets: again, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 })
 

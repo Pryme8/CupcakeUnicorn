@@ -71,6 +71,44 @@ for the measurements and how they were taken.
   0.98 s. Measured over a full chain, the time from a clean miss to falling off
   the bottom goes from 1.81 s to 2.49 s, and the first 400 px of the drop takes
   1.04 s instead of 0.68.
+### Zones
+
+The climb does not stay in the sky. Keep going and the air thins, then runs out,
+and then you are somewhere else entirely. Each zone is a different game, not a
+reskin: its own gravity, its own things to bounce off, its own thing to collect,
+its own sky.
+
+| Zone | Begins at | Gravity | You bounce off | You collect |
+| --- | --- | --- | --- | --- |
+| The Sky | 0 m | 1.00 | clouds | butterflies |
+| The Atmosphere | 50,000 m | 0.86 | clouds, cirrus wisps | butterflies |
+| Space | 10,000,000 m | 0.50 | asteroids, saucers, planets | stars |
+| Unicorn Heaven | 1,000,000,000,000 m | 0.34 | haloed clouds | feathers |
+
+**Why the numbers get silly.** Climb rate in pixels per second barely moves
+between zones — for a bounce, apex is `v²/2g` and the period `2v/g`, so the rate
+is `v/4` whatever gravity does. What changes is how much altitude a pixel is
+*worth*: a metre over a field, then a metre of thinning air, then the distance
+between rocks. `metresPerPx` goes 1/24, then 1.5, then 40,000, then a billion,
+so the HUD leaves the thousands behind and never comes back, while the game in
+front of you stays playable.
+
+**Why those thresholds.** 50,000 m is where the air starts to thin because that
+is the best run anyone has had — about 32 minutes of flawless climbing, reached
+by one bot run in twelve. The best run so far is the *start* of the story. Past
+that it is deliberately enormous: measured per zone, Space is about three and a
+half hours in and Heaven about twelve and three-quarter hours in, on one run,
+without dying. Heaven is meant to be a rumour. It is entirely possible nobody
+will ever see it — half of all bot runs die inside four minutes of Space, so
+surviving nine straight hours of it is not a thing that is going to happen by
+accident. If it should ever need to be reachable, the only numbers to change are
+the `fromMetre` and `metresPerPx` pairs in `ZONES`.
+
+**The collection is the other reason to climb.** Butterflies, stars and feathers
+are counted across every run you have ever played and shown when you fall, so a
+run that ends at 2,000 m still added something that survives it. The high score
+is not the only thing you take away.
+
 - **One-use clouds** are an option, not the default — `CLOUD.vanishOnBounce`,
   the `V` key mid-run, or `?vanish=1`. A cloud puffs out as soon as you bounce
   off it, so the ladder burns away behind you. It plays as a different, much
