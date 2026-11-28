@@ -1,15 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import GameView from './components/GameView.vue'
+import SkyJumpView from './components/SkyJumpView.vue'
 
-type Screen = 'landing' | 'game'
+type Screen = 'landing' | 'game' | 'skyjump'
 
-const screen = ref<Screen>('landing')
+// ?game=skyjump drops straight into the endless climber, the same way
+// ?level=N jumps into a level of the main game.
+const requestedGame = new URLSearchParams(window.location.search).get('game')
+
+const screen = ref<Screen>(requestedGame === 'skyjump' ? 'skyjump' : 'landing')
+
+// How to Play, Controls and Credits are 530px of reference material. On a tall
+// window they are simply the page; in an itch.io embed they push the three mode
+// cards below the fold, so there they start folded and open on a click.
+const roomyEnough = typeof window === 'undefined' || window.innerHeight >= 900
 const playerCount = ref<1 | 2>(1)
 
 const startGame = (count: 1 | 2) => {
   playerCount.value = count
   screen.value = 'game'
+}
+
+const startSkyJump = () => {
+  screen.value = 'skyjump'
 }
 
 const returnToLanding = () => {
@@ -22,7 +36,7 @@ const heroTagline = computed(() =>
 </script>
 
 <template>
-  <main class="app-shell">
+  <main class="app-shell" :class="{ playing: screen !== 'landing' }">
     <section v-if="screen === 'landing'" class="landing">
       <header class="hero">
         <span class="hero-badge">Ages 4-6</span>
@@ -43,9 +57,17 @@ const heroTagline = computed(() =>
           <p>Race a friend from opposite corners. Grab the most hearts and stars.</p>
           <button class="secondary" type="button" @click="startGame(2)">Start Duo</button>
         </article>
+
+        <article class="mode-card">
+          <h2>Pegasus Jump</h2>
+          <p>Solo high-score climb. Bounce forever, chase butterflies, never touch the bottom.</p>
+          <button class="primary" type="button" @click="startSkyJump">Start Climbing</button>
+        </article>
       </section>
 
-      <section class="rules">
+      <details class="rules" :open="roomyEnough">
+        <summary>How to play, controls and credits</summary>
+        <div class="rules-grid">
         <div>
           <h3>How to Play</h3>
           <ul>
@@ -69,8 +91,27 @@ const heroTagline = computed(() =>
           <p>Daisy Butt - Creator</p>
           <p>Dahlia Butt - Co Creator</p>
           <p>Special thanks: Andrew Butt - Dad (Prompt Engineering)</p>
+          <p class="credit-note">
+            Pegasus Jump is a remake of <em>Kitten Jump</em>, an iPhone game that can no longer be
+            found. Its jump arc, hang time and climb rate were measured from
+            <a href="https://www.youtube.com/watch?v=mND9LnoQLsI" target="_blank" rel="noopener noreferrer"
+              >its trailer</a
+            >, the only reference left.
+          </p>
         </div>
-      </section>
+        </div>
+      </details>
+    </section>
+
+    <section v-else-if="screen === 'skyjump'" class="game">
+      <div class="game-header">
+        <div>
+          <h2>Pegasus Jump</h2>
+          <p>How high can you get?</p>
+        </div>
+        <button class="ghost" type="button" @click="returnToLanding">Back to Menu</button>
+      </div>
+      <SkyJumpView />
     </section>
 
     <section v-else class="game">

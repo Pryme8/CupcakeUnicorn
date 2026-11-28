@@ -38,6 +38,23 @@ body {
   display: grid;
   gap: 32px;
 }
+/* Short windows: tighten the page rather than let it scroll. */
+@media (max-height: 820px) {
+  /* 56px of bottom padding is breathing room on a page you scroll and wasted
+     fold on one you do not. */
+  .app-shell {
+    padding-bottom: 20px;
+  }
+  .landing {
+    gap: 18px;
+  }
+  .landing .hero {
+    padding: 18px 24px;
+  }
+  .landing .hero h1 {
+    margin: 6px 0;
+  }
+}
 
 .hero {
   padding: 28px 32px;
@@ -90,7 +107,7 @@ body {
   position: absolute;
   right: 12px;
   bottom: -60px;
-  width: min(328px, 44vw);
+  width: min(328px, 44vw, 30vh);
   height: auto;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
@@ -126,14 +143,33 @@ body {
   margin: 0 0 18px;
 }
 
+/*
+ * The reference block is a disclosure, open on a tall window and folded on a
+ * short one (see roomyEnough in App.vue). Folded it costs a summary row rather
+ * than 530px, which is the difference between the three mode cards being on
+ * screen in an itch.io embed and being below the fold.
+ */
 .rules {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 20px;
   background: rgba(255, 255, 255, 0.68);
   padding: 24px;
   border-radius: 24px;
   box-shadow: 0 12px 30px rgba(32, 80, 120, 0.12);
+}
+.rules > summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 18px;
+  list-style-position: inside;
+}
+/* Open on a tall window, the summary is a heading for what is already there,
+   so it does not need to look like a control. */
+.rules[open] > summary {
+  margin-bottom: 18px;
+}
+.rules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
 }
 
 .rules h3 {
@@ -152,6 +188,16 @@ body {
 
 .credits p {
   margin: 6px 0;
+}
+/* The provenance line, set apart from the names above it. */
+.credits .credit-note {
+  margin-top: 14px;
+  font-size: 0.9em;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+.credits .credit-note a {
+  color: inherit;
 }
 
 button {
@@ -233,5 +279,96 @@ button:hover {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
+  }
+}
+
+/* Pegasus Jump: a tall portrait column, centred, capped so it fits a laptop. */
+.skyjump-shell {
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.skyjump-frame {
+  /* Just a box for Phaser to fit into, as big as the row it sits in allows.
+     It carries no shape of its own: giving it the 9:16 ratio meant that
+     whenever width was the binding constraint the box stayed too tall and
+     Phaser letterboxed the difference in its background colour. Phaser's FIT
+     already keeps the canvas at 9:16, so the ratio is its job alone and the
+     rounding and shadow belong on the canvas, which is the visible edge. */
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pixel art must not be resampled when the canvas is scaled to fit the box. */
+.skyjump-frame canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 24px;
+  box-shadow: 0 18px 40px rgba(42, 27, 61, 0.25);
+}
+
+.skyjump-shell .game-hint {
+  width: min(100%, 640px);
+}
+
+/*
+ * Playing, in a window or in somebody's iframe.
+ *
+ * itch.io serves an HTML5 game in a frame of a size you pick, and a page laid
+ * out from the viewport does not survive that: at 960x720 the header card and
+ * the hint took 343px, the climber's 9:16 box was sized from vh on top of
+ * that, and the bottom of the playfield landed 71px below the fold — the part
+ * of a climber where you actually die. Making the shell fill the frame and the
+ * playfield take whatever is left means there is no size to get right.
+ */
+.app-shell.playing {
+  display: flex;
+  flex-direction: column;
+  /* A definite height, not a minimum: `flex: 1` below can only bound the
+     playfield row if there is a ceiling for it to divide up. With min-height
+     the frame kept its intrinsic 960px and pushed the page past the fold
+     again, which is the bug this whole block exists to fix. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  padding-block: clamp(8px, 2vh, 32px);
+}
+.app-shell.playing .game {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.app-shell.playing .skyjump-shell {
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.app-shell.playing .game-shell {
+  min-height: 0;
+}
+
+/*
+ * Short or narrow frames: the chrome goes before the game does. Nothing is
+ * lost — the controls are on the in-game hint overlay too, and the header only
+ * repeats the name of the mode you just chose. Narrow counts as well as short
+ * because on a phone the 9:16 playfield is bounded by height, so every row of
+ * chrome costs width too.
+ */
+@media (max-height: 900px), (max-width: 700px) {
+  .app-shell.playing .game-hint {
+    display: none;
+  }
+  .app-shell.playing .game-header {
+    padding: 8px 14px;
+  }
+  .app-shell.playing .game-header p {
+    display: none;
   }
 }
