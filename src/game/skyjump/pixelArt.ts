@@ -523,11 +523,13 @@ const STAR_PALETTES: Record<number, string>[] = [
 const STAR_OUTLINES = ['#8a6212', '#2f5d8c', '#8c3f70']
 
 const FEATHER_PALETTES: Record<number, string>[] = [
-  { [UPPER]: '#fff6da', [GLINT]: '#ffffff', [LOWER]: '#e3cf9a', [BODY]: '#c9a94a' },
+  // Amber rather than cream: heaven's sky runs gold at the top and near-white
+  // at the bottom, and a cream feather disappeared into both ends of it.
+  { [UPPER]: '#e8a94f', [GLINT]: '#ffe9b0', [LOWER]: '#b87a2e', [BODY]: '#7d4f1a' },
   { [UPPER]: '#ffd9ec', [GLINT]: '#fff2f8', [LOWER]: '#e0a6c6', [BODY]: '#b9739a' },
   { [UPPER]: '#dff0ff', [GLINT]: '#ffffff', [LOWER]: '#a8c8e6', [BODY]: '#6f93b5' },
 ]
-const FEATHER_OUTLINES = ['#a08536', '#8d5478', '#587892']
+const FEATHER_OUTLINES = ['#543a12', '#8d5478', '#587892']
 
 /** A twinkle rather than a flap: the glint moves, the shape holds. */
 const starMask = (frame: number) => {
@@ -611,6 +613,33 @@ const createOtherPickups = (scene: Phaser.Scene) => {
 /** A 16x14 butterfly for the counter, so the HUD sits on the grid too. */
 export const HUD_BUTTERFLY = 'skyjump-px-hud-butterfly'
 
+/**
+ * The counter's icon follows the zone, because the count does: in space it is
+ * stars and in heaven it is feathers, and a butterfly beside that number is
+ * simply a lie. One icon per pickup kind, all about the butterfly's weight so
+ * the HUD does not shift when the zone changes.
+ */
+export const hudIconKey = (kind: string) =>
+  kind === 'butterfly' ? HUD_BUTTERFLY : `skyjump-px-hud-${kind}`
+
+/** Shorter than the falling feather: the HUD has 14 rows, not 17. */
+const HUD_FEATHER_ROWS = [
+  '....XX.....',
+  '...XXXX....',
+  '..XXXXXX...',
+  '.XXXXXXX...',
+  '.XXXXXXXX..',
+  '.XXXXXXX...',
+  '.XXXXXX....',
+  '..XXXXX....',
+  '..XXXX.....',
+  '...XXX.....',
+  '...XX......',
+  '....Q......',
+  '....Q......',
+  '....Q......',
+]
+
 const createHudIcon = (scene: Phaser.Scene) => {
   const m = mask(16, 14)
   for (const dir of [-1, 1]) {
@@ -619,6 +648,20 @@ const createHudIcon = (scene: Phaser.Scene) => {
   }
   ellipse(m, 8, 7, 1, 5.5, BODY)
   paint(scene, HUD_BUTTERFLY, m, BUTTERFLY_PALETTES[0] as Record<number, string>, BUTTERFLY_OUTLINES[0])
+
+  const star = fromRows(STAR_ROWS, { X: UPPER })
+  shadeRows(star, 8, UPPER, LOWER)
+  poke(star, 5, 5, GLINT)
+  poke(star, 6, 5, GLINT)
+  poke(star, 5, 6, GLINT)
+  paint(scene, hudIconKey('star'), star, STAR_PALETTES[0] as Record<number, string>, STAR_OUTLINES[0])
+
+  const feather = fromRows(HUD_FEATHER_ROWS, { X: UPPER, Q: BODY })
+  shadeRows(feather, 7, UPPER, LOWER)
+  poke(feather, 4, 1, GLINT)
+  poke(feather, 4, 2, GLINT)
+  poke(feather, 3, 3, GLINT)
+  paint(scene, hudIconKey('feather'), feather, FEATHER_PALETTES[0] as Record<number, string>, FEATHER_OUTLINES[0])
 }
 
 export const PIXEL_TEXTURES = {

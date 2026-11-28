@@ -10,11 +10,11 @@ import {
   CLOUD_TOP_ROW,
   PIXEL,
   PIXEL_TEXTURES,
-  HUD_BUTTERFLY,
   PX_CUPCAKE,
   PICKUP_COLOURS,
   UNICORN_ART,
   createPixelArt,
+  hudIconKey,
   pickupAnimKey,
   pickupKey,
   platformKey,
@@ -125,6 +125,7 @@ export default class SkyJumpScene extends Phaser.Scene {
 
   private heightText!: Phaser.GameObjects.Text
   private butterflyText!: Phaser.GameObjects.Text
+  private pickupIcon!: Phaser.GameObjects.Image
   private bestText!: Phaser.GameObjects.Text
   private chainText!: Phaser.GameObjects.Text
   private overlay?: Phaser.GameObjects.Container
@@ -340,7 +341,10 @@ export default class SkyJumpScene extends Phaser.Scene {
 
     this.heightText = this.add.text(20, 16, '0', style(38)).setDepth(DEPTH.hud)
 
-    this.add.image(VIEW.width / 2 - 36, 36, HUD_BUTTERFLY).setDepth(DEPTH.hud).setScale(PIXEL)
+    this.pickupIcon = this.add
+      .image(VIEW.width / 2 - 36, 36, hudIconKey(this.core.zone.pickup))
+      .setDepth(DEPTH.hud)
+      .setScale(PIXEL)
     this.butterflyText = this.add.text(VIEW.width / 2 - 8, 16, '0', style(38)).setDepth(DEPTH.hud)
 
     this.bestText = this.add
@@ -700,6 +704,8 @@ export default class SkyJumpScene extends Phaser.Scene {
   private syncHud() {
     this.heightText.setText(formatMetres(this.core.metres))
     this.butterflyText.setText(`${this.core.butterfliesCaught}`)
+    const icon = hudIconKey(this.core.zone.pickup)
+    if (this.pickupIcon.texture.key !== icon) this.pickupIcon.setTexture(icon)
     const notes = []
     if (this.core.touring) notes.push('tour — not scored')
     if (this.core.vanishOnBounce) notes.push('one-use clouds  [V]')
