@@ -21,6 +21,7 @@ import {
   SCORE,
   VIEW,
   ZONES,
+  ZONE_FROM_PX,
   metresAtPx,
   zoneIndexAtPx,
   type PickupKind,
@@ -165,6 +166,13 @@ export class SkyJumpCore {
   caught: Record<PickupKind, number> = { butterfly: 0, star: 0, feather: 0 }
   /** Highest zone index entered this run. Only ever goes up. */
   deepestZone = 0
+  /**
+   * True once a run has been dropped into a zone rather than climbed to it.
+   * Heaven is twelve hours up and almost nobody will ever see it the honest
+   * way, so there has to be a way to go and look — but a run that skipped the
+   * climb cannot be allowed to set a record or fill the collection.
+   */
+  touring = false
   /** Current butterfly chain: each catch adds to the bounce, idling resets it. */
   chain = 0
   /** Counts down after a cupcake; the view draws the rainbow trail while it runs. */
@@ -265,6 +273,7 @@ export class SkyJumpCore {
     this.cupcakesEaten = 0
     this.caught = { butterfly: 0, star: 0, feather: 0 }
     this.deepestZone = 0
+    this.touring = false
     this.chain = 0
     this.superTimer = 0
     this.floatTimer = 0
@@ -300,6 +309,36 @@ export class SkyJumpCore {
       facing: 1,
     }
     this.cameraY = this.player.y + VIEW.height * (CAMERA.anchor - 0.5)
+    this.fillAbove()
+  }
+
+  /**
+   * Drops the run at the foot of a zone, world and all, and marks it a tour.
+   * Nothing a tour does is written to the high score or the collection.
+   */
+  jumpToZone(index: number) {
+    const i = Math.max(0, Math.min(ZONES.length - 1, Math.floor(index)))
+    // Clear of the line, not on it: starting exactly on a border means the
+    // first dip of the first hop falls back into the zone below, and the sky
+    // and the platforms you were brought here to see flip back with it.
+    const y = (ZONE_FROM_PX[i] as number) + (i > 0 ? 600 : 0)
+    this.touring = true
+    this.phase = 'playing'
+    this.clouds = []
+    this.butterflies = []
+    this.cupcakes = []
+    this.player.x = PLAYER.startX
+    this.player.y = y
+    this.player.vx = 0
+    this.player.vy = MOVEMENT.bounceVelocity
+    this.peakY = y
+    this.cameraY = y + VIEW.height * (CAMERA.anchor - 0.5)
+    this.spawnY = y
+    this.lastRowX = PLAYER.startX
+    this.floatTimer = 0
+    this.chain = 0
+    // One below, so arriving still gets the zone's banner.
+    this.deepestZone = Math.max(0, i - 1)
     this.fillAbove()
   }
 

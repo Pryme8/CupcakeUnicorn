@@ -104,6 +104,15 @@ surviving nine straight hours of it is not a thing that is going to happen by
 accident. If it should ever need to be reachable, the only numbers to change are
 the `fromMetre` and `metresPerPx` pairs in `ZONES`.
 
+**Going to look without the twelve hours.** `?zone=space` starts a run at the
+foot of a zone (`atmosphere`, `space`, `heaven`, or an index), and `Z` walks up
+through them mid-run and wraps back to the sky. A run that was dropped into a
+zone rather than climbed to it is a **tour**: the HUD says so, and when it ends
+nothing is written to the high score or the collection. That is the whole
+reason the shortcut can ship in the real build rather than hide behind a dev
+flag — Heaven is twelve hours up and otherwise nobody would ever see it, but a
+record still has to be earned.
+
 **The collection is the other reason to climb.** Butterflies, stars and feathers
 are counted across every run you have ever played and shown when you fall, so a
 run that ends at 2,000 m still added something that survives it. The high score
@@ -160,7 +169,8 @@ Controls: hold Left/Right (or A/D), or click once on the canvas to take the
 controls with the mouse — after that the Pegasus follows the pointer with no
 button held, and how far away the pointer is sets how hard it steers, so you can
 ease onto a cloud. Touching the keyboard hands the controls back to it. Space or
-a click restarts after a fall. `V` toggles one-use clouds mid-run.
+a click restarts after a fall. `V` toggles one-use clouds mid-run, and `Z`
+tours the next zone (see Zones).
 
 ## Development
 

@@ -134,6 +134,7 @@ export default class SkyJumpScene extends Phaser.Scene {
   private keyRight?: Phaser.Input.Keyboard.Key[]
   private keyRestart?: Phaser.Input.Keyboard.Key
   private keyVanish?: Phaser.Input.Keyboard.Key
+  private keyZone?: Phaser.Input.Keyboard.Key
   private modeText!: Phaser.GameObjects.Text
   /**
    * Set by the first click on the canvas. After that the Pegasus follows the
@@ -169,7 +170,16 @@ export default class SkyJumpScene extends Phaser.Scene {
     this.core = new SkyJumpCore()
     // ?vanish=1 starts in one-use-cloud mode; V flips it mid-run so the two
     // can be compared back to back.
-    if (new URLSearchParams(window.location.search).get('vanish') === '1') this.core.vanishOnBounce = true
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('vanish') === '1') this.core.vanishOnBounce = true
+    // ?zone=space (or atmosphere, heaven, or an index) starts the run there,
+    // so the zones above the sky can be looked at without the twelve hours.
+    const wanted = params.get('zone')
+    if (wanted) {
+      const byId = ZONES.findIndex((z) => z.id === wanted.toLowerCase())
+      const index = byId >= 0 ? byId : Number(wanted)
+      if (Number.isFinite(index) && index > 0) this.core.jumpToZone(index)
+    }
 
     this.paintBackdrop()
     this.skyZone = 0
@@ -358,6 +368,7 @@ export default class SkyJumpScene extends Phaser.Scene {
       this.keyRight = [keyboard.addKey(codes.RIGHT), keyboard.addKey(codes.D)]
       this.keyRestart = keyboard.addKey(codes.SPACE)
       this.keyVanish = keyboard.addKey(codes.V)
+      this.keyZone = keyboard.addKey(codes.Z)
     }
     this.input.on('pointerdown', () => {
       if (this.core.phase === 'dead') this.restart()
@@ -376,6 +387,7 @@ export default class SkyJumpScene extends Phaser.Scene {
     }
 
     if (this.keyVanish && Phaser.Input.Keyboard.JustDown(this.keyVanish)) this.toggleVanish()
+    if (this.keyZone && Phaser.Input.Keyboard.JustDown(this.keyZone)) this.tourNextZone()
     this.core.update(dt, { steer: this.readSteer() })
     this.handleEvents(this.core.drainEvents())
     this.syncClouds()
@@ -688,7 +700,21 @@ export default class SkyJumpScene extends Phaser.Scene {
   private syncHud() {
     this.heightText.setText(formatMetres(this.core.metres))
     this.butterflyText.setText(`${this.core.butterfliesCaught}`)
-    this.modeText.setText(this.core.vanishOnBounce ? 'one-use clouds  [V]' : '')
+    const notes = []
+    if (this.core.touring) notes.push('tour — not scored')
+    if (this.core.vanishOnBounce) notes.push('one-use clouds  [V]')
+    this.modeText.setText(notes.join('\n'))
+  }
+
+  /**
+   * Z walks up through the zones and wraps back to the sky. It is a way to go
+   * and look at the top of the game, so from the first press the run is a
+   * tour: the HUD says so and nothing it does is kept.
+   */
+  private tourNextZone() {
+    const next = (this.core.zoneIndex + 1) % ZONES.length
+    this.core.jumpToZone(next)
+    this.clearSprites()
   }
 
   /** Flips one-use clouds on or off without interrupting the run. */
@@ -736,8 +762,12 @@ export default class SkyJumpScene extends Phaser.Scene {
   }
 
   private showGameOver() {
+    // A zone banner runs for three seconds; dying inside that window would
+    // otherwise leave it printed across the panel.
+    this.zoneBanner?.destroy()
+    this.zoneBanner = undefined
     const score = this.core.score
-    if (score > this.best) {
+    if (!this.core.touring && score > this.best) {
       this.best = score
       this.writeBest(score)
     }
@@ -757,7 +787,7 @@ export default class SkyJumpScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
 
-    const total = this.bankCollection()
+    const total = this.core.touring ? this.readCollection() : this.bankCollection()
     const zone = ZONES[this.core.deepestZone]
 
     panel.add(big('Down you go!', VIEW.height * 0.3, 54, '#ffd9ec'))
@@ -775,6 +805,9 @@ export default class SkyJumpScene extends Phaser.Scene {
     panel.add(big('collected, all time', VIEW.height * 0.62, 20, '#b9c6d8'))
     panel.add(big(parts.join('   •   '), VIEW.height * 0.665, 24, '#ffffff'))
 
+    if (this.core.touring) {
+      panel.add(big('a tour — nothing from this run was kept', VIEW.height * 0.705, 20, '#b9c6d8'))
+    }
     const again = big('Space / tap to fly again', VIEW.height * 0.76, 30, '#ffffff')
     panel.add(again)
     this.tweens.add({ targets: again, alpha: 0.4, duration: 700, yoyo: true, repeat: -1 })
@@ -786,14 +819,19 @@ export default class SkyJumpScene extends Phaser.Scene {
     this.overlay?.destroy(true)
     this.overlay = undefined
     this.tweens.killAll()
+    this.clearSprites()
+    this.chainText.setAlpha(0)
+    this.core.reset()
+  }
+
+  /** Drops every entity sprite, for a restart or a jump to another zone. */
+  private clearSprites() {
     for (const [, sprite] of this.cloudSprites) sprite.destroy()
     for (const [, sprite] of this.butterflySprites) sprite.destroy()
     for (const [, sprite] of this.cupcakeSprites) sprite.destroy()
     this.cloudSprites.clear()
     this.butterflySprites.clear()
     this.cupcakeSprites.clear()
-    this.chainText.setAlpha(0)
-    this.core.reset()
   }
 
   // -- high score ------------------------------------------------------------
